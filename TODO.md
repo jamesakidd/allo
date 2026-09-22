@@ -236,7 +236,7 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 - [x] Trim and Brotli-compress the WASM payload, measure cold start on cell data
   - `MapStaticAssets` replaces `UseBlazorFrameworkFiles`/`UseStaticFiles`. The build already writes `.br` copies and their hashes; only this serves them, with `immutable` caching on fingerprinted assets. **12.1MB raw → 3.6MB over the wire**, and nothing after the first load
   - `OverrideHtmlAssetPlaceholders` had to go: the SDK only rewrites `index.html` for a *standalone* client publish. Allo.Api hosts the client, so a published `index.html` kept the literal `#[.{fingerprint}]` and the app would not have booted in production while working fine in dev. `PwaTests` guards this
-  - Not done: the `wasm-tools` workload (publish warns it is missing) would relink and shrink `dotnet.native.wasm` further. It is a build-machine dependency, so decide it with the Dockerfile
+  - The `wasm-tools` relink is done in the container build (see Deployment). **Measured, it saves almost nothing**: `dotnet.native.wasm.br` 0.93MB → 0.89MB, and the whole `_framework` payload 3.45MB → 3.38MB. Blazor's default publish already trims the IL hard; the large savings quoted for `wasm-tools` come from AOT or from feature switches like invariant globalization, which was turned down deliberately
 - [x] Touch targets sized for one-handed use in a store, checkbox hit area generous (48px rows, large checkboxes, add bar at the bottom within thumb reach)
 - [x] Keep the keyboard up when adding multiple items in a row
 - [x] Dark theme (the example app is dark and it is the right call for a store)
@@ -266,7 +266,7 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 ## Deployment
 
 - [x] Multi-stage Dockerfile, one image, API serves the WASM output
-  - `wasm-tools` installed in the build stage: it relinks the WASM runtime and strips what Allo never calls. It lives in the image, so it is not a dependency on any dev machine
+  - `wasm-tools` installed in the build stage, which also needs `python3`: Emscripten drives the relink through `emcc`, a Python script, and the SDK image ships no Python (`unable to find python in $PATH` at publish). Kept deliberately after measuring — it only saves ~40KB over the wire and roughly doubles the build time, but the build time is CI's to spend
   - Runs as root, matching EWD ERP, so a bind-mounted appdata share on Unraid needs no `chown`
   - `curl` is installed solely for `HEALTHCHECK`; the aspnet image ships neither curl nor wget. `/healthz` checks the database, so unhealthy means more than "process alive"
   - **Not built or run yet — there is no Docker on the dev machine.** The first real build is CI's
@@ -274,6 +274,8 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
   - Also builds (without publishing) on every push to master, because this repo merges straight to master and never opens PRs — otherwise a broken Dockerfile would first surface on a release tag
   - The image build depends on the test job, so a failing suite can never publish an image
   - Pin a version tag on the Unraid container rather than tracking `latest` (the lesson from EWD ERP QA)
+  - **The image tag has no `v`.** `metadata-action` strips it, so a `v0.1.0` git tag publishes `ghcr.io/jamesakidd/allo:0.1.0`, `:0.1` and `:latest`. `:v0.1.0` does not exist and pulling it 404s
+  - First release published 2026-09-22 as `0.1.0`; the package is public, so Unraid pulls it with no `docker login`
 - [x] Unraid container template, all config via env vars (double-underscore keys) — `deploy/allo.xml`, `br0` with its own IP like `EWDERP_QA`, port 8080, one `/appdata` volume. Unraid pulls a prebuilt image and never builds from source; the "Repository" field on its form is an *image* repo, not a git repo
 - [ ] Make the GHCR package public after the first publish, so Unraid pulls with no login (the ERP's private package needs a `docker login` that does not survive a reboot, since Unraid's rootfs is RAM-backed)
 - [x] SQLite file on a bind-mounted appdata volume — one `/appdata` volume holds the database *and* the data protection keys, since losing the keys logs the whole family out
