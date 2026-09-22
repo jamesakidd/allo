@@ -33,9 +33,10 @@
     <div class="add-input">
         <MudTextField @ref="_input" @bind-Value="_text" @bind-Value:after="OnTextChanged"
                       Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense"
-                      Placeholder="Add an item" Adornment="Adornment.End"
-                      AdornmentIcon="@Icons.Material.Filled.Add" OnAdornmentClick="@(() => AddAsync(_text))"
-                      OnKeyDown="OnKeyDown" autocapitalize="none" autocomplete="off" />
+                      Placeholder="Add an item" OnKeyDown="OnKeyDown"
+                      autocapitalize="none" autocomplete="off" />
+        <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                       Size="Size.Medium" OnClick="@(() => AddAsync(_text))" aria-label="Add" />
     </div>
 </div>
 

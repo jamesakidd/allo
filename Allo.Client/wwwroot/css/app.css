@@ -155,6 +155,16 @@ h1:focus {
     z-index: 1200;
 }
 
+.add-input {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+    .add-input > .mud-input-control {
+        flex: 1;
+    }
+
 .add-suggestions {
     max-height: 13rem;
     overflow-y: auto;
