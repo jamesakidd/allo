@@ -40,8 +40,11 @@ of the user seeing their own change.
   walking order over the shared categories
 - `Item` (id, name, defaultCategoryId, aliases, defaultTags, notes, lastUsedAt) — the
   reusable catalog, separate from list entries
-- `ListEntry` (id, listId, itemId, quantity, unit, note, isChecked, storeId, tags,
-  addedBy, updatedAt, isDeleted)
+- `ListEntry` (id, listId, itemId, categoryId, quantity, unit, note, storeId, tags,
+  addedBy, updatedAt, updatedBy, isChecked, checkedAt, checkedBy, isDeleted, sequence)
+  - `sequence` is server-assigned on every accepted change, never set by the client
+  - content group (quantity, unit, note, categoryId, storeId, tags) is covered by
+    `updatedAt`/`updatedBy`; checked group (`isChecked`) by `checkedAt`/`checkedBy`
 
 **Categories are global; stores only define ordering over them.** Do not hang categories
 off stores directly, or every item needs a category assignment per store.
@@ -56,10 +59,33 @@ collections natively.
 
 ### Sync model
 
-Item-level last-write-wins. Every entry carries `updatedAt` and an `isDeleted` tombstone
-(never hard delete). Client tracks `lastSyncedAt`, pushes pending changes, pulls anything
-newer. Real conflicts are near-nonexistent on a shopping list: one person checking off
-milk and another adding bread do not collide.
+Last-write-wins per field group, with a server-assigned sequence number as the only
+sync cursor. Client clocks are never used to decide anything.
+
+- **Sequence cursor:** the server keeps a monotonic counter (SQLite has no `rowversion`,
+  so an AUTOINCREMENT change-log table or a single counter row). Every accepted change
+  stamps the entry's `Sequence` with the next number. The client stores the highest
+  sequence it has seen and pulls "everything with `Sequence` > N", tombstones included.
+- **Two field groups per entry, resolved independently:**
+  - *Content:* quantity, unit, note, category, store, tags. Metadata: `UpdatedAt`, `UpdatedBy`.
+  - *Checked state:* `IsChecked`. Metadata: `CheckedAt`, `CheckedBy`.
+
+  So one person changing milk from 1 to 2 while another checks it off, both offline,
+  keeps both changes. Plain row-level LWW would lose one.
+- **Resolution rule: last to reach the server wins, per field group.** "Last" means
+  server receive order, never device time. The server writes the incoming field group,
+  stamps a new `Sequence`, and returns the result. No base version is sent and there is
+  no merge logic or conflict prompt (nobody should be resolving conflicts mid-aisle).
+  Two offline edits to the same group: the later sync wins, which is usually the fresher
+  intent.
+- **Tombstones:** `IsDeleted` soft delete, never hard delete. **Deletes are final:** an
+  edit arriving for an entry that is already deleted is ignored, so a device coming back
+  online cannot resurrect items someone else cleared.
+- **Timestamps are informational:** `UpdatedAt` and `CheckedAt` are for display ("checked
+  by Sam at 3:14"), not conflict resolution.
+
+Real conflicts are rare on a shopping list: one person checking off milk and another
+adding bread do not collide.
 
 No SignalR in v1. Refresh on app focus plus pull-to-refresh is enough.
 
@@ -68,23 +94,28 @@ No SignalR in v1. Refresh on app focus plus pull-to-refresh is enough.
 - Client-generated GUIDs for all ids, so offline creates work without a round trip
 - Normalize item and tag names to lowercase for matching, display original casing
 - "Uncategorized" is a real category that always sorts last, never a null
+- Units are free text: a nullable string, trimmed and stored lowercase. The UI suggests
+  `ea`, `g`, `kg`, `lb`, `pkg`, `bunch`, `dozen` but accepts anything ("bag", "tray").
+  Not an enum: adding a unit would need a code change and a migration, and an older
+  offline client could receive a value it doesn't know
 
 ---
 
 ## Phase 0: Foundations
 
-- [ ] Scaffold solution: `Allo.Client` (Blazor WASM PWA), `Allo.Api` (minimal API), `Allo.Shared` (DTOs/models)
-- [ ] EF Core + SQLite, initial migration, auto-migrate on startup
-- [ ] Health check endpoint
-- [ ] Local dev run: API serving the WASM output same-origin, so dev matches prod
-- [ ] Decide and document unit handling (free text vs enum for ea/kg/lb/pkg/bunch)
+- [x] Scaffold solution: `Allo.Client` (Blazor WASM PWA), `Allo.Api` (minimal API), `Allo.Shared` (DTOs/models)
+- [x] EF Core + SQLite, initial migration, auto-migrate on startup
+- [x] Health check endpoint (`/healthz`, includes a DB check)
+- [x] Local dev run: API serving the WASM output same-origin, so dev matches prod
+- [x] Decide and document unit handling: free text with suggestions (see Conventions)
 
 ## Data Model
 
 - [ ] `Category` with self-referencing `ParentId`, seeded top-level set (Produce, Bakery, Dairy, Meat & Seafood, Frozen, Pantry, Beverages, Snacks, Household, Personal Care, Baby, Pet, Uncategorized)
 - [ ] `Store` + `StoreCategoryOrder`, with a sensible default order applied to any new store
 - [ ] `Item` catalog table with `Aliases` and `DefaultTags` as JSON columns
-- [ ] `ShoppingList` + `ListEntry`, with `UpdatedAt`, `IsDeleted`, `AddedBy`
+- [ ] `ShoppingList` + `ListEntry`, with `CategoryId`, `AddedBy`, `UpdatedAt`, `UpdatedBy`, `IsChecked`, `CheckedAt`, `CheckedBy`, `IsDeleted`, `Sequence`
+- [ ] Sequence counter (change-log table or single counter row) that stamps `ListEntry.Sequence` on every accepted change
 - [ ] Index on `ListEntry.Sequence` (every sync pull filters on it)
 
 ## Catalog & Categorization

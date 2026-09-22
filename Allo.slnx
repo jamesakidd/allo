@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Allo.Api/Allo.Api.csproj" />
+  <Project Path="Allo.Client/Allo.Client.csproj" />
+  <Project Path="Allo.Shared/Allo.Shared.csproj" />
+  <Project Path="Allo.Tests/Allo.Tests.csproj" />
+</Solution>
