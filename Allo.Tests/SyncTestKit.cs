@@ -54,6 +54,14 @@ public sealed class Phone
         var login = await http.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
         login.EnsureSuccessStatusCode();
         var user = (await login.Content.ReadFromJsonAsync<CurrentUser>())!;
+        if (user.MustChangePassword)
+        {
+            // A real first login gets the temporary password out of the way before the
+            // account can do anything, so the phone does too.
+            (await http.PostAsJsonAsync("/api/auth/password",
+                new ChangePasswordRequest(password, TestApp.SettledPassword))).EnsureSuccessStatusCode();
+            password = TestApp.SettledPassword;
+        }
         var phone = new Phone
         {
             Http = http, Network = network, Storage = new InMemoryStorage(),
@@ -112,16 +120,36 @@ public static class TestAppExtensions
     // Adds a family member through the admin and returns their phone.
     public static async Task<Phone> AddPhoneAsync(this TestApp app, string username)
     {
-        var admin = app.CreateClient();
-        (await admin.PostAsJsonAsync("/api/auth/login",
-            new LoginRequest(TestApp.AdminUsername, TestApp.AdminPassword))).EnsureSuccessStatusCode();
+        var admin = await LoggedInAdminAsync(app);
         const string password = "family-password";
-        if (username != TestApp.AdminUsername)
+        if (username == TestApp.AdminUsername)
         {
-            (await admin.PostAsJsonAsync("/api/users",
-                new AddFamilyMemberRequest(username, username, password))).EnsureSuccessStatusCode();
+            return await Phone.CreateAsync(app, username, TestApp.SettledPassword);
         }
-        return await Phone.CreateAsync(app, username,
-            username == TestApp.AdminUsername ? TestApp.AdminPassword : password);
+        (await admin.PostAsJsonAsync("/api/users",
+            new AddFamilyMemberRequest(username, username, password))).EnsureSuccessStatusCode();
+        return await Phone.CreateAsync(app, username, password);
+    }
+
+    // The bootstrap account is on a temporary password, and the API refuses everything
+    // else until it changes — so settle it first, like a person would. Callable more than
+    // once per app, since the second phone finds the password already changed.
+    private static async Task<HttpClient> LoggedInAdminAsync(TestApp app)
+    {
+        var admin = app.CreateClient();
+        var login = await admin.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest(TestApp.AdminUsername, TestApp.AdminPassword));
+        if (!login.IsSuccessStatusCode)
+        {
+            login = await admin.PostAsJsonAsync("/api/auth/login",
+                new LoginRequest(TestApp.AdminUsername, TestApp.SettledPassword));
+        }
+        login.EnsureSuccessStatusCode();
+        if ((await login.Content.ReadFromJsonAsync<CurrentUser>())!.MustChangePassword)
+        {
+            (await admin.PostAsJsonAsync("/api/auth/password",
+                new ChangePasswordRequest(TestApp.AdminPassword, TestApp.SettledPassword))).EnsureSuccessStatusCode();
+        }
+        return admin;
     }
 }

@@ -7,7 +7,11 @@ namespace Allo.Tests;
 public sealed class TestApp : IDisposable
 {
     public const string AdminUsername = "admin";
+    // Temporary, exactly as a real bootstrap account is: the API refuses everything but
+    // reading your own account and changing this, until it is changed.
     public const string AdminPassword = "initial-pass";
+    // What a test account's password becomes once it has been through that first change.
+    public const string SettledPassword = "settled-password";
 
     private readonly string _directory =
         Path.Combine(Path.GetTempPath(), "allo-tests-" + Guid.NewGuid().ToString("N"));

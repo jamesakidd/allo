@@ -58,11 +58,18 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         {
             var idClaim = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
             var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
-            if (!Guid.TryParse(idClaim, out var userId) || !await db.UserLogins.AnyAsync(l => l.UserId == userId))
+            var login = Guid.TryParse(idClaim, out var userId)
+                ? await db.UserLogins.AsNoTracking().SingleOrDefaultAsync(l => l.UserId == userId)
+                : null;
+            if (login is null)
             {
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                return;
             }
+            // Read here because this already runs on every request; TemporaryPasswordGate
+            // turns it into a 403 for everything but changing the password.
+            context.HttpContext.Items[TemporaryPasswordGate.MustChangePasswordItem] = login.MustChangePassword;
         };
     });
 builder.Services.AddAuthorization();
@@ -107,6 +114,32 @@ if (knownProxies.Length > 0)
     app.UseForwardedHeaders();
 }
 
+// Security headers live here rather than on the reverse proxy so they travel with the
+// container and survive someone rebuilding the proxy entry.
+// The CSP is what a Blazor WASM app needs and no more: 'wasm-unsafe-eval' to instantiate
+// the runtime, blob: workers for the dotnet threads, and inline styles because MudBlazor
+// positions popovers with style attributes. Scripts are same-origin files only — there is
+// no inline script left in index.html — so no 'unsafe-inline' for script-src.
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers["Content-Security-Policy"] =
+        "default-src 'self'; " +
+        "script-src 'self' 'wasm-unsafe-eval'; " +
+        "style-src 'self' 'unsafe-inline'; " +
+        "img-src 'self' data:; " +
+        "font-src 'self'; " +
+        "connect-src 'self'; " +
+        "worker-src 'self' blob:; " +
+        "manifest-src 'self'; " +
+        "base-uri 'self'; " +
+        "form-action 'self'; " +
+        "frame-ancestors 'none'";
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["Referrer-Policy"] = "no-referrer";
+    await next();
+});
+
 // Auto-migrate on startup: a single-container, single-instance app with no DBA,
 // so there is nobody to run migrations by hand before an update.
 using (var scope = app.Services.CreateScope())
@@ -138,6 +171,7 @@ app.UseRateLimiter();
 app.MapHealthChecks("/healthz");
 // Everything under /api requires a login unless it opts out (login, logout).
 var api = app.MapGroup("/api").RequireAuthorization();
+api.AddEndpointFilter(TemporaryPasswordGate.Filter);
 api.MapAuthEndpoints();
 api.MapSyncEndpoints();
 

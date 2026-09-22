@@ -19,6 +19,13 @@
     <EmbeddedResource Include="Data\Seed\catalog.json" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The dev bootstrap credentials must not ship inside a public container image.
+         Production never loads this file, but anyone can pull the image and read it,
+         and starting the container in Development would create that account for real. -->
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>

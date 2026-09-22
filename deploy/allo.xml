@@ -81,7 +81,7 @@
           Description="Where the cookie encryption keys live. Leave this alone: if it ever points outside the App Data volume, every container update logs the whole family out."
           Type="Variable" Display="advanced" Required="false" Mask="false">/appdata/keys</Config>
 
-  <Config Name="TZ" Target="TZ" Default="" Mode=""
-          Description="Container timezone for log timestamps, e.g. America/Toronto. Blank means UTC. Stored timestamps are UTC regardless, so this only affects the log."
-          Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="TZ" Target="TZ" Default="America/Halifax" Mode=""
+          Description="Container timezone for log timestamps. Stored timestamps are UTC regardless, so this only affects the log."
+          Type="Variable" Display="advanced" Required="false" Mask="false">America/Halifax</Config>
 </Container>

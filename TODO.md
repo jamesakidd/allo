@@ -253,7 +253,7 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 - [x] `[Authorize]` on all API endpoints as the real boundary; `AuthorizeView` gates the UI (`/api` group requires auth; login/logout opt out. Client: `[Authorize]` on every page via `_Imports.razor`, login opts out)
 - [x] Family-scale only: 4 or 5 accounts, no roles, no public sign-up. Accounts created manually or by a simple invite token
   - First account from `Admin__Username` / `Admin__InitialPassword` / `Admin__DisplayName` when none exist; after that any member adds others on the Family page with a temporary password
-  - Temporary and initial passwords must be changed at first login (the app routes to Account until they are). Minimum 8 characters
+  - Temporary and initial passwords must be changed at first login. Enforced by the **API**, not just the UI: `TemporaryPasswordGate` 403s every `/api` endpoint except reading your own account, changing your password and logging out. The client routes to Account and skips syncing until it is done
   - Dev bootstrap in `appsettings.Development.json`: `dev` / `allo-dev-pass`
 - [x] Change own password, rename display name
 - [x] Login rate limiting: 5 attempts per minute per client address, 429 after that
@@ -284,7 +284,21 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 - [x] Forwarded headers for NPM: trust `X-Forwarded-For`/`-Proto` from the proxy only (`KnownProxies`). Without it the login rate limiter sees one address (the proxy) for everyone, and the cookie's `SameAsRequest` secure flag sees plain http
   - Set `ForwardedHeaders__KnownProxies__0` to NPM's address. An empty list leaves the middleware out of the pipeline entirely, which is what a direct LAN run wants
   - The framework's default trusted networks are cleared: honouring `X-Forwarded-For` from anyone would let a caller claim any address and walk around the login rate limit. `ForwardedHeaderTests` pins this
-- [ ] Security review for internet exposure, same considerations as EWD ERP
+- [x] Security review for internet exposure, same considerations as EWD ERP
+
+**Fixed by the review:**
+- **Dev credentials shipped inside the image.** `appsettings.Development.json` (`dev` / `allo-dev-pass`) was copied into the publish output. Production never loads it, but the GHCR package is public, so anyone could read it — and starting the container with `ASPNETCORE_ENVIRONMENT=Development` would create that account for real. Now excluded from publish
+- **`MustChangePassword` was UI-only.** A temporary password read out over the phone kept full API access for as long as nobody visited the Account page. Now enforced server-side (see Auth). Logging out is deliberately still allowed
+- **No security headers.** Added CSP, `X-Content-Type-Options`, `Referrer-Policy`, in the app rather than on the proxy so they survive someone rebuilding the proxy entry. The CSP is the minimum Blazor WASM needs — `'wasm-unsafe-eval'`, blob: workers, and inline *styles* for MudBlazor's popovers — but **no `'unsafe-inline'` for scripts**, which is why the inline service-worker registration moved into `app-update.js`. Verified in a browser: no violations
+
+**Reviewed and accepted, not bugs:**
+- Login is rate limited (5/min/address) and answers unknown usernames with a dummy hash verify, so neither status codes nor timing reveal which accounts exist
+- Sync takes identity from the login and never from the payload; all `/api` requires auth; unmatched `/api` routes 404 rather than falling through to `index.html`
+- Any member can add another member. Deliberate (no roles, family scale), but it means one compromised account can create a lasting second one. Revisit if "remove a family member" gets built
+- `/healthz` is anonymous, which the container's HEALTHCHECK needs. It reveals only that an app is up
+- `AllowedHosts` is `*`. The app builds no absolute URLs from `Host`, so there is nothing to poison
+
+**Left to the proxy:** HSTS belongs on NPM, which terminates TLS. The app deliberately does not send it, since it also serves plain http on the LAN.
 
 ## Misc / Cosmetic
 
@@ -300,3 +314,4 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 - [ ] Recurring staples with a suggested cadence
 - [ ] Barcode scan to add (browser camera API, accuracy will be the problem)
 - [ ] Meal planning that generates list entries
+- [ ] Create a "families" class above users so this app can be used by some friends and they can have their own data set and shared lists among their own users. This will probably require email invites. 

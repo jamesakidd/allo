@@ -34,7 +34,11 @@ public sealed class SyncCoordinator(LocalStore store, SyncEngine engine, AlloAut
     [JSInvokable]
     public void OnWake() => SyncIfLoggedIn();
 
-    public Task SyncNowAsync() => auth.User is null ? Task.CompletedTask : engine.SyncAsync();
+    // An account still on its temporary password is refused by the server until it sets a
+    // real one, so don't sync it: the queue would only collect 403s and show a sync error
+    // on top of the change-your-password screen.
+    public Task SyncNowAsync() =>
+        auth.User is null or { MustChangePassword: true } ? Task.CompletedTask : engine.SyncAsync();
 
     private void SyncIfLoggedIn() => _ = SyncNowAsync();
 

@@ -18,9 +18,11 @@ public static class AuthEndpoints
         var auth = api.MapGroup("/auth");
         auth.MapPost("/login", Login).AllowAnonymous().RequireRateLimiting(LoginRateLimitPolicy);
         // Cast: a lone HttpContext parameter would otherwise bind as a RequestDelegate and drop the result.
-        auth.MapPost("/logout", (Delegate)Logout).AllowAnonymous();
-        auth.MapGet("/me", Me);
-        auth.MapPost("/password", ChangePassword);
+        // Logging out has to work whatever state the account is in, including a temporary password.
+        auth.MapPost("/logout", (Delegate)Logout).AllowAnonymous().AllowTemporaryPassword();
+        // The only two an account on a temporary password may still call.
+        auth.MapGet("/me", Me).AllowTemporaryPassword();
+        auth.MapPost("/password", ChangePassword).AllowTemporaryPassword();
         auth.MapPut("/display-name", UpdateDisplayName);
 
         var users = api.MapGroup("/users");

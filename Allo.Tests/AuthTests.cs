@@ -11,10 +11,20 @@ public class AuthTests : IDisposable
     private static Task<HttpResponseMessage> Login(HttpClient client, string username, string password) =>
         client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
 
+    // Still on the temporary password, like a freshly bootstrapped account.
     private async Task<HttpClient> LoggedInAdmin()
     {
         var client = _app.CreateClient();
         (await Login(client, TestApp.AdminUsername, TestApp.AdminPassword)).EnsureSuccessStatusCode();
+        return client;
+    }
+
+    // Past the forced password change, which is what the rest of the API requires.
+    private async Task<HttpClient> SettledAdmin()
+    {
+        var client = await LoggedInAdmin();
+        (await client.PostAsJsonAsync("/api/auth/password",
+            new ChangePasswordRequest(TestApp.AdminPassword, TestApp.SettledPassword))).EnsureSuccessStatusCode();
         return client;
     }
 
@@ -117,7 +127,7 @@ public class AuthTests : IDisposable
     [Fact]
     public async Task UpdateDisplayName_Trims_AndRejectsBlank()
     {
-        var client = await LoggedInAdmin();
+        var client = await SettledAdmin();
 
         var ok = await client.PutAsJsonAsync("/api/auth/display-name", new UpdateDisplayNameRequest("  Dad "));
         var blank = await client.PutAsJsonAsync("/api/auth/display-name", new UpdateDisplayNameRequest("  "));
@@ -129,7 +139,7 @@ public class AuthTests : IDisposable
     [Fact]
     public async Task AddFamilyMember_CanLogIn_AndMustChangePassword()
     {
-        var admin = await LoggedInAdmin();
+        var admin = await SettledAdmin();
 
         var response = await admin.PostAsJsonAsync("/api/users",
             new AddFamilyMemberRequest("Alex", "Alex", "temp-password"));
@@ -149,7 +159,7 @@ public class AuthTests : IDisposable
     [InlineData("kid", "Kid", "short")]
     public async Task AddFamilyMember_Rejects_TakenOrInvalid(string username, string displayName, string password)
     {
-        var admin = await LoggedInAdmin();
+        var admin = await SettledAdmin();
 
         var response = await admin.PostAsJsonAsync("/api/users",
             new AddFamilyMemberRequest(username, displayName, password));
