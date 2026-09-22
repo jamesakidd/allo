@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Allo.Api.Auth;
@@ -6,6 +7,7 @@ using Allo.Api.Sync;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -66,6 +68,26 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IPasswordHasher<UserLogin>, PasswordHasher<UserLogin>>();
 
+// Behind Nginx Proxy Manager every request arrives from the proxy's address, so without
+// this the rate limiter below sees one client for the whole family and the cookie's
+// SameAsRequest secure flag sees plain http and never sets Secure.
+// Only the addresses in ForwardedHeaders:KnownProxies are trusted, and the framework's
+// default trusted networks are cleared: honouring X-Forwarded-For from anyone would let a
+// caller claim any address they like and walk straight around the login rate limit. An
+// empty list leaves the middleware out of the pipeline entirely, which is what a direct
+// run on the LAN wants.
+var knownProxies = builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [];
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+    foreach (var proxy in knownProxies)
+    {
+        options.KnownProxies.Add(IPAddress.Parse(proxy));
+    }
+});
+
 // Slows password guessing: 5 login attempts per minute per client address by default.
 var loginAttemptsPerMinute = builder.Configuration.GetValue("Auth:LoginAttemptsPerMinute", 5);
 builder.Services.AddRateLimiter(options =>
@@ -77,6 +99,13 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
+
+// First in the pipeline: everything downstream that reads the client address or the scheme
+// needs the real ones, not the proxy's.
+if (knownProxies.Length > 0)
+{
+    app.UseForwardedHeaders();
+}
 
 // Auto-migrate on startup: a single-container, single-instance app with no DBA,
 // so there is nobody to run migrations by hand before an update.

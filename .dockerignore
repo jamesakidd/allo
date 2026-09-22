@@ -1,0 +1,15 @@
+# Keep the build context small, and keep local state out of the image entirely.
+# appdata holds the dev SQLite database and the dev cookie keys — neither belongs in a
+# published container.
+**/bin/
+**/obj/
+**/appdata/
+.git/
+.github/
+.vs/
+.vscode/
+**/*.user
+Dockerfile
+.dockerignore
+TODO.md
+deploy/

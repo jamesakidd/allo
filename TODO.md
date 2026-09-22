@@ -265,13 +265,22 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 
 ## Deployment
 
-- [ ] Multi-stage Dockerfile, one image, API serves the WASM output
-- [ ] GitHub Actions on version tags, push to GHCR (`ghcr.io/jamesakidd/allo:vX.Y.Z` + `latest`)
+- [x] Multi-stage Dockerfile, one image, API serves the WASM output
+  - `wasm-tools` installed in the build stage: it relinks the WASM runtime and strips what Allo never calls. It lives in the image, so it is not a dependency on any dev machine
+  - Runs as root, matching EWD ERP, so a bind-mounted appdata share on Unraid needs no `chown`
+  - `curl` is installed solely for `HEALTHCHECK`; the aspnet image ships neither curl nor wget. `/healthz` checks the database, so unhealthy means more than "process alive"
+  - **Not built or run yet — there is no Docker on the dev machine.** The first real build is CI's
+- [x] GitHub Actions: test, then build; publish to GHCR (`ghcr.io/jamesakidd/allo:vX.Y.Z`, `:X.Y` + `latest`) on version tags only
+  - Also builds (without publishing) on every push to master, because this repo merges straight to master and never opens PRs — otherwise a broken Dockerfile would first surface on a release tag
+  - The image build depends on the test job, so a failing suite can never publish an image
+  - Pin a version tag on the Unraid container rather than tracking `latest` (the lesson from EWD ERP QA)
 - [ ] Unraid container template, all config via env vars (double-underscore keys)
-- [ ] SQLite file on a bind-mounted appdata volume
+- [x] SQLite file on a bind-mounted appdata volume — one `/appdata` volume holds the database *and* the data protection keys, since losing the keys logs the whole family out
 - [ ] NPM reverse proxy on a No-IP subdomain with a valid Let's Encrypt cert (required for service worker and home screen install; do not rely on Tailscale, family members will not have the tailnet up in a store)
 - [ ] Backup: scheduled copy of the SQLite file, plus a manual copy before any container update
-- [ ] Forwarded headers for NPM: trust `X-Forwarded-For`/`-Proto` from the proxy only (`KnownProxies`). Without it the login rate limiter sees one address (the proxy) for everyone, and the cookie's `SameAsRequest` secure flag sees plain http
+- [x] Forwarded headers for NPM: trust `X-Forwarded-For`/`-Proto` from the proxy only (`KnownProxies`). Without it the login rate limiter sees one address (the proxy) for everyone, and the cookie's `SameAsRequest` secure flag sees plain http
+  - Set `ForwardedHeaders__KnownProxies__0` to NPM's address. An empty list leaves the middleware out of the pipeline entirely, which is what a direct LAN run wants
+  - The framework's default trusted networks are cleared: honouring `X-Forwarded-For` from anyone would let a caller claim any address and walk around the login rate limit. `ForwardedHeaderTests` pins this
 - [ ] Security review for internet exposure, same considerations as EWD ERP
 
 ## Misc / Cosmetic

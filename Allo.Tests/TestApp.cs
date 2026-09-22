@@ -17,15 +17,21 @@ public sealed class TestApp : IDisposable
     public string DatabasePath => Path.Combine(_directory, "allo.db");
 
     // Tests log in far more often than people do; the rate limit test passes the real limit.
-    public TestApp(int loginAttemptsPerMinute = 1000)
+    public TestApp(int loginAttemptsPerMinute = 1000, params (string Key, string Value)[] settings)
     {
-        Factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b
-            .UseSetting("ConnectionStrings:Default", $"Data Source={DatabasePath};Pooling=false")
-            .UseSetting("DataProtection:KeysPath", Path.Combine(_directory, "keys"))
-            .UseSetting("Admin:Username", AdminUsername)
-            .UseSetting("Admin:InitialPassword", AdminPassword)
-            .UseSetting("Admin:DisplayName", "Sam")
-            .UseSetting("Auth:LoginAttemptsPerMinute", loginAttemptsPerMinute.ToString()));
+        Factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
+        {
+            b.UseSetting("ConnectionStrings:Default", $"Data Source={DatabasePath};Pooling=false")
+                .UseSetting("DataProtection:KeysPath", Path.Combine(_directory, "keys"))
+                .UseSetting("Admin:Username", AdminUsername)
+                .UseSetting("Admin:InitialPassword", AdminPassword)
+                .UseSetting("Admin:DisplayName", "Sam")
+                .UseSetting("Auth:LoginAttemptsPerMinute", loginAttemptsPerMinute.ToString());
+            foreach (var (key, value) in settings)
+            {
+                b.UseSetting(key, value);
+            }
+        });
     }
 
     // Keeps cookies between requests, like a browser.
