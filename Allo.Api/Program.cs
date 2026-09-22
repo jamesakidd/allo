@@ -96,8 +96,11 @@ if (app.Environment.IsDevelopment())
 
 // The API serves the published Blazor WASM app same-origin, in dev and in prod,
 // so there is no CORS and the auth cookie just works.
-app.UseBlazorFrameworkFiles();
-app.UseStaticFiles();
+// MapStaticAssets rather than UseStaticFiles: the build already writes Brotli copies of
+// every asset along with their hashes, and only this serves them, with immutable caching
+// on the fingerprinted ones. The runtime is ~21MB raw and a third of that compressed,
+// which is the difference between a usable and an unusable first load on cell data.
+app.MapStaticAssets();
 
 app.UseAuthentication();
 app.UseAuthorization();

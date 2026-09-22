@@ -4,7 +4,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <!-- No OverrideHtmlAssetPlaceholders: the SDK only rewrites index.html for a standalone
+         client publish. Allo.Api hosts the client, so a published index.html keeps the raw
+         "#[.{fingerprint}]" placeholder and the app never boots. The unfingerprinted asset
+         routes exist either way, and the service worker caches them by content hash. -->
     <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
   </PropertyGroup>
 

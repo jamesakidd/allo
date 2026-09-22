@@ -1,0 +1,34 @@
+@implements IDisposable
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+
+@* Renders nothing. It owns the service worker registration and, when a newer build is
+   cached and waiting, offers it rather than taking the page out from under someone. *@
+
+@code {
+    private DotNetObjectReference<UpdatePrompt>? _self;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+        _self = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("alloUpdate.register", _self);
+    }
+
+    [JSInvokable]
+    public Task OnUpdateReady() => InvokeAsync(() =>
+        // Sticks around until it's dealt with: a snackbar that times out mid-aisle is
+        // the same as no snackbar, and the build would sit stale until the next restart.
+        Snackbar.Add("A new version of allo is ready", Severity.Info, options =>
+        {
+            options.RequireInteraction = true;
+            options.Action = "Update";
+            options.ActionColor = Color.Primary;
+            options.OnClick = _ => JS.InvokeVoidAsync("alloUpdate.apply").AsTask();
+        }));
+
+    public void Dispose() => _self?.Dispose();
+}

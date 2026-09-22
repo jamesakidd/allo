@@ -227,13 +227,21 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 
 ## PWA & Mobile UX
 
-- [ ] Web manifest, icons, splash, standalone display mode
-- [ ] Service worker caching the app shell, with a working update path (no stale-forever builds)
-- [ ] Trim and Brotli-compress the WASM payload, measure cold start on cell data
+- [x] Web manifest, icons, splash, standalone display mode (`standalone`, maskable 192/512 icons, dark `theme_color`)
+- [x] Service worker caching the app shell, with a working update path (no stale-forever builds)
+  - A new build installs in the background and **waits**. A snackbar offers it; tapping Update swaps the worker and reloads. Ignoring it means the new build loads at the next cold start anyway. Nothing ever reloads unasked — that would be at its worst mid-aisle
+  - The worker records the hash of every asset it cached. The next build carries over the entries that did not change instead of refetching them: measured, a cold install fetches 118 `_framework` files and an update that touched one stylesheet fetched **0**
+  - `/api` and `/healthz` are never cached. A stale sync pull or auth check is worse than an honest failure, which the sync queue already retries
+  - A failed fetch fails the install. A half-cached shell would serve a broken app offline and never correct itself
+- [x] Trim and Brotli-compress the WASM payload, measure cold start on cell data
+  - `MapStaticAssets` replaces `UseBlazorFrameworkFiles`/`UseStaticFiles`. The build already writes `.br` copies and their hashes; only this serves them, with `immutable` caching on fingerprinted assets. **12.1MB raw → 3.6MB over the wire**, and nothing after the first load
+  - `OverrideHtmlAssetPlaceholders` had to go: the SDK only rewrites `index.html` for a *standalone* client publish. Allo.Api hosts the client, so a published `index.html` kept the literal `#[.{fingerprint}]` and the app would not have booted in production while working fine in dev. `PwaTests` guards this
+  - Not done: the `wasm-tools` workload (publish warns it is missing) would relink and shrink `dotnet.native.wasm` further. It is a build-machine dependency, so decide it with the Dockerfile
 - [x] Touch targets sized for one-handed use in a store, checkbox hit area generous (48px rows, large checkboxes, add bar at the bottom within thumb reach)
 - [x] Keep the keyboard up when adding multiple items in a row
 - [x] Dark theme (the example app is dark and it is the right call for a store)
-- [ ] Verify home screen install on Android
+- [x] Manifest and icons verified installable on localhost (secure context), shell served from cache with the network off, including a deep route
+- [ ] Verify home screen install on Android — needs the real certificate, so it lands with Deployment
 
 ## Auth
 
