@@ -2,6 +2,9 @@
 @implements IDisposable
 @inject AlloAuthStateProvider Auth
 @inject NavigationManager Navigation
+@inject SyncCoordinator Sync
+@inject Allo.Shared.Sync.LocalStore Store
+@inject IDialogService Dialogs
 
 <MudLayout>
     <AuthorizeView>
@@ -11,6 +14,8 @@
                                aria-label="Menu" OnClick="@(() => _drawerOpen = !_drawerOpen)" />
                 <img src="logo-mark.png" alt="" class="ml-2" style="height: 1.75rem;" />
                 <MudText Typo="Typo.h6" Class="ml-2">Allo</MudText>
+                <MudSpacer />
+                <SyncStatus />
             </MudAppBar>
             <MudDrawer @bind-Open="_drawerOpen" Variant="DrawerVariant.Temporary" Elevation="1">
                 <MudDrawerHeader>
@@ -35,10 +40,11 @@
 @code {
     private bool _drawerOpen;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         Navigation.LocationChanged += OnLocationChanged;
         Auth.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        await Sync.StartAsync();
     }
 
     protected override void OnParametersSet() => EnforcePasswordChange();
@@ -64,8 +70,22 @@
         StateHasChanged();
     });
 
+    // Unsynced changes stay on the device through a logout and go up after the next login,
+    // but say so rather than let someone assume they're gone or already saved.
     private async Task LogoutAsync()
     {
+        var pending = Store.PendingCount;
+        if (pending > 0)
+        {
+            var confirmed = await Dialogs.ShowMessageBoxAsync("Changes not synced yet",
+                $"{pending} {(pending == 1 ? "change hasn't" : "changes haven't")} reached the server. "
+                + "They'll stay on this phone and sync after the next login.",
+                yesText: "Log out", cancelText: "Cancel");
+            if (confirmed != true)
+            {
+                return;
+            }
+        }
         await Auth.LogoutAsync();
         Navigation.NavigateTo("login", replace: true);
     }

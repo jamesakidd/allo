@@ -1,4 +1,6 @@
 @page "/"
+@implements IDisposable
+@inject Allo.Shared.Sync.LocalStore Store
 
 <PageTitle>allo</PageTitle>
 
@@ -7,4 +9,16 @@
     <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Size="Size.Large" Color="Color.Primary" />
     <MudText Typo="Typo.h6">Groceries</MudText>
     <MudText Typo="Typo.body2" Class="mud-text-secondary">The list screen is coming next.</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+        On this device: @Store.Items.Count(i => !i.IsDeleted) catalog items,
+        @Store.Categories.Count(c => !c.IsDeleted) categories, @Store.Entries.Count(e => !e.IsDeleted) entries
+    </MudText>
 </MudStack>
+
+@code {
+    protected override void OnInitialized() => Store.Changed += Refresh;
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Store.Changed -= Refresh;
+}

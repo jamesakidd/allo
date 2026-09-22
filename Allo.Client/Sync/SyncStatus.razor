@@ -1,0 +1,64 @@
+@using Allo.Shared.Sync
+@implements IDisposable
+@inject LocalStore Store
+@inject SyncEngine Engine
+@inject SyncCoordinator Coordinator
+
+@* Words, not a spinner: "3 changes pending" reads as working; a spinning icon reads as broken. *@
+<MudButton Variant="Variant.Text" Size="Size.Small" Color="@_color" StartIcon="@_icon"
+           OnClick="Coordinator.SyncNowAsync" Style="text-transform: none;" aria-label="Sync now">
+    @_text
+</MudButton>
+
+@code {
+    private Timer? _timer;
+    private string _text = "";
+    private string _icon = "";
+    private Color _color;
+
+    protected override void OnInitialized()
+    {
+        Store.Changed += Refresh;
+        Engine.StateChanged += Refresh;
+        // Keeps "synced 2 min ago" current.
+        _timer = new Timer(_ => Refresh(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+        Update();
+    }
+
+    private void Refresh() => InvokeAsync(() =>
+    {
+        Update();
+        StateHasChanged();
+    });
+
+    private void Update()
+    {
+        var pending = Store.PendingCount;
+        var offline = Engine.State == SyncState.Offline;
+        (_text, _icon, _color) = (pending, Engine.State) switch
+        {
+            (_, SyncState.Error) => ("Sync problem", Icons.Material.Filled.ErrorOutline, Color.Warning),
+            ( > 0, _) => ($"{pending} {(pending == 1 ? "change" : "changes")} pending{(offline ? " · offline" : "")}",
+                Icons.Material.Filled.CloudUpload, offline ? Color.Warning : Color.Default),
+            (_, SyncState.Offline) => ("Offline", Icons.Material.Filled.CloudOff, Color.Warning),
+            _ => (Store.LastSyncedAt is { } at ? $"Synced {Ago(at)}" : "Not synced yet",
+                Icons.Material.Filled.CloudDone, Color.Default),
+        };
+    }
+
+    private static string Ago(DateTimeOffset at)
+    {
+        var elapsed = DateTimeOffset.UtcNow - at;
+        return elapsed.TotalMinutes < 1 ? "just now"
+            : elapsed.TotalHours < 1 ? $"{(int)elapsed.TotalMinutes} min ago"
+            : elapsed.TotalDays < 1 ? $"{(int)elapsed.TotalHours} h ago"
+            : $"{(int)elapsed.TotalDays} d ago";
+    }
+
+    public void Dispose()
+    {
+        Store.Changed -= Refresh;
+        Engine.StateChanged -= Refresh;
+        _timer?.Dispose();
+    }
+}

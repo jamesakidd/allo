@@ -105,6 +105,11 @@ sync cursor. Client clocks are never used to decide anything.
 - **Timestamps are informational:** `UpdatedAt` and `CheckedAt` are for display ("checked
   by Sam at 3:14"), not conflict resolution.
 
+- **Duplicate new items merge:** a new item whose name matches an existing one isn't
+  inserted; its entries point at the existing item and the phone is told to swap ids.
+- **One bad row never blocks the queue:** rejected rows come back with the server's
+  version, and the phone drops its change.
+
 Real conflicts are rare on a shopping list: one person checking off milk and another
 adding bread do not collide.
 
@@ -192,16 +197,22 @@ No SignalR in v1. Refresh on app focus plus pull-to-refresh is enough.
 
 ## Offline & Sync
 
-- [ ] Local store in `Blazored.LocalStorage` holding the full list state
-- [ ] Optimistic writes: UI updates immediately, change queued for sync
-- [ ] Pending change queue, survives app close and reload
-- [ ] `GET /api/sync?since={seq}` returning changed entries including tombstones
-- [ ] `POST /api/sync` accepting a batch of client changes, LWW resolution server-side
-- [ ] Sync on app focus, on reconnect, and on pull-to-refresh
-- [ ] Sync status indicator: last synced time and pending change count. Not a spinner. "3 changes pending" reads as working, an ambiguous spinner reads as broken
-- [ ] Duplicate catalog items: two devices can create "oat milk" offline with different ids (`Item.NormalizedName` is deliberately not unique). Sync must merge them: keep one, repoint entries, tombstone the other
-- [ ] Test properly in airplane mode: add, check off, edit, delete, then reconnect
-- [ ] Split checked state into its own resolution field set: `IsChecked`, `CheckedAt`, `CheckedBy`, resolved independently of the `UpdatedAt` that covers quantity, unit, note, category, and tags. Two resolution rules per entry, not one. Handles the real collision: she changes milk 1 to 2 while you check milk off, both offline. Plain row-level LWW loses one of those changes. Do this before building sync, not after (retrofitting means a migration and a protocol change)
+Engine lives in `Allo.Shared/Sync` (`LocalStore`, `SyncEngine`, `HttpSyncTransport`) behind an
+`ISyncStorage` interface, so tests run real "phones" against the real server. The Blazor
+client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync (`SyncCoordinator`).
+
+- [x] Local store in `Blazored.LocalStorage` holding the full list state: every synced table, one key per table (`allo.sync.*`), loaded before first render so the app opens with data offline
+- [x] Optimistic writes: UI updates immediately, change queued for sync (`LocalStore.SaveAsync` / `DeleteAsync` / `SetCheckedAsync`)
+- [x] Pending change queue, survives app close and reload. Holds markers per row and field group, not copies, so repeated edits to one row push once. Revision numbers keep an edit made during a push from being cleared by that push's response
+- [x] `GET /api/sync?since={seq}` returning changed rows of every synced table including tombstones, plus the family list, read in one transaction so the cursor matches the rows
+- [x] `POST /api/sync` accepting a batch of client changes, LWW resolution server-side. Who comes from the login, never the payload. Each row saved on its own: an invalid row is rejected (with the server's current version returned) instead of failing the batch and stalling the queue forever
+- [x] Sync on app focus, on reconnect, on start/login, and about a second after local changes stop. Tapping the status indicator syncs now
+- [ ] Pull-to-refresh gesture on the list screen (lands with the list UI; calls `SyncCoordinator.SyncNowAsync`)
+- [x] Sync status indicator: last synced time and pending change count. Not a spinner. "3 changes pending" reads as working, an ambiguous spinner reads as broken (`SyncStatus` in the app bar: "Synced 2 min ago", "3 changes pending", "Offline")
+- [x] Duplicate catalog items: two devices can create "oat milk" offline with different ids (`Item.NormalizedName` is deliberately not unique). Sync must merge them: keep one, repoint entries, tombstone the other. (Built as: the server never inserts the second one; it repoints that push's entries and returns an `ItemRemap`, and the phone swaps the id locally)
+- [x] Test properly in airplane mode: add, check off, edit, delete, then reconnect (automated in `SyncEngineTests` with two simulated phones)
+- [ ] Same airplane-mode run on real phones once deployed
+- [x] Split checked state into its own resolution field set: `IsChecked`, `CheckedAt`, `CheckedBy`, resolved independently of the `UpdatedAt` that covers quantity, unit, note, category, and tags. Two resolution rules per entry, not one. Handles the real collision: she changes milk 1 to 2 while you check milk off, both offline. Plain row-level LWW loses one of those changes. Do this before building sync, not after (retrofitting means a migration and a protocol change)
 - [x] Server-side monotonic sequence counter instead of timestamps for the sync cursor. Every accepted change gets the next number; client cursor is that number, pull is "everything with seq > N". Immune to phone clock drift, which otherwise lets a device that is 10 minutes fast win every conflict for 10 minutes. SQLite has no `rowversion`, so use an AUTOINCREMENT change-log table or a single counter row
 
 ## PWA & Mobile UX
@@ -230,7 +241,9 @@ No SignalR in v1. Refresh on app focus plus pull-to-refresh is enough.
 - [x] Login rate limiting: 5 attempts per minute per client address, 429 after that
 - [x] Client remembers the logged-in user on the device, so the app opens with no signal; only a real 401 logs out
 - [ ] Remove a family member (not built; would need a tombstone rather than a delete, since entries reference users)
-- [ ] Confirm the service worker and offline flow behave when the cookie has expired (do not silently discard queued changes)
+- [x] Confirm the offline flow behaves when the cookie has expired (do not silently discard queued changes): a 401 during sync sends the user to log in and keeps the queue, which goes up after login
+- [ ] Re-check the expired-cookie flow once the service worker caches the app shell (PWA section)
+- [x] Logging out with unsynced changes warns, and keeps them on the device for the next login
 
 ## Deployment
 

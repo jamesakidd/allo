@@ -13,11 +13,8 @@ public static class AuthEndpoints
 {
     public const string LoginRateLimitPolicy = "login";
 
-    public static void MapAuthEndpoints(this IEndpointRouteBuilder app)
+    public static void MapAuthEndpoints(this RouteGroupBuilder api)
     {
-        // Everything under /api requires a login unless it opts out.
-        var api = app.MapGroup("/api").RequireAuthorization();
-
         var auth = api.MapGroup("/auth");
         auth.MapPost("/login", Login).AllowAnonymous().RequireRateLimiting(LoginRateLimitPolicy);
         // Cast: a lone HttpContext parameter would otherwise bind as a RequestDelegate and drop the result.

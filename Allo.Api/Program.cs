@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Allo.Api.Auth;
 using Allo.Api.Data;
+using Allo.Api.Sync;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
@@ -65,13 +66,14 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IPasswordHasher<UserLogin>, PasswordHasher<UserLogin>>();
 
-// Slows password guessing: 5 login attempts per minute per client address.
+// Slows password guessing: 5 login attempts per minute per client address by default.
+var loginAttemptsPerMinute = builder.Configuration.GetValue("Auth:LoginAttemptsPerMinute", 5);
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.AddPolicy(AuthEndpoints.LoginRateLimitPolicy, http => RateLimitPartition.GetFixedWindowLimiter(
         http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(1) }));
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = loginAttemptsPerMinute, Window = TimeSpan.FromMinutes(1) }));
 });
 
 var app = builder.Build();
@@ -102,7 +104,10 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapHealthChecks("/healthz");
-app.MapAuthEndpoints();
+// Everything under /api requires a login unless it opts out (login, logout).
+var api = app.MapGroup("/api").RequireAuthorization();
+api.MapAuthEndpoints();
+api.MapSyncEndpoints();
 
 // Unmatched /api routes must 404 rather than fall through to index.html.
 app.MapFallback("/api/{**path}", () => Results.NotFound());

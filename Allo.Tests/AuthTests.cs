@@ -67,7 +67,8 @@ public class AuthTests : IDisposable
     [Fact]
     public async Task Login_IsRateLimited()
     {
-        var client = _app.CreateClient();
+        using var app = new TestApp(loginAttemptsPerMinute: 5);
+        var client = app.CreateClient();
 
         for (var i = 0; i < 5; i++)
         {
