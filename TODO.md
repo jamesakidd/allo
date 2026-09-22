@@ -274,10 +274,13 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
   - Also builds (without publishing) on every push to master, because this repo merges straight to master and never opens PRs — otherwise a broken Dockerfile would first surface on a release tag
   - The image build depends on the test job, so a failing suite can never publish an image
   - Pin a version tag on the Unraid container rather than tracking `latest` (the lesson from EWD ERP QA)
-- [ ] Unraid container template, all config via env vars (double-underscore keys)
+- [x] Unraid container template, all config via env vars (double-underscore keys) — `deploy/allo.xml`, `br0` with its own IP like `EWDERP_QA`, port 8080, one `/appdata` volume. Unraid pulls a prebuilt image and never builds from source; the "Repository" field on its form is an *image* repo, not a git repo
+- [ ] Make the GHCR package public after the first publish, so Unraid pulls with no login (the ERP's private package needs a `docker login` that does not survive a reboot, since Unraid's rootfs is RAM-backed)
 - [x] SQLite file on a bind-mounted appdata volume — one `/appdata` volume holds the database *and* the data protection keys, since losing the keys logs the whole family out
 - [ ] NPM reverse proxy on a No-IP subdomain with a valid Let's Encrypt cert (required for service worker and home screen install; do not rely on Tailscale, family members will not have the tailnet up in a store)
-- [ ] Backup: scheduled copy of the SQLite file, plus a manual copy before any container update
+- [x] Backup: scheduled copy of the SQLite file, plus a manual copy before any container update — `deploy/backup-allo.sh`, for the User Scripts plugin, 30-day retention
+  - Archives the database **and** the data protection keys together. Restoring a database without its keys leaves everyone logged out with an undecryptable cookie
+  - Stops the container for the copy. SQLite is a file, not a server: a copy taken mid-write can be torn, and the tear is silent until restore time. A few seconds of downtime for a shopping list is the cheap side of that trade, and it needs no `sqlite3` on the host or in the image
 - [x] Forwarded headers for NPM: trust `X-Forwarded-For`/`-Proto` from the proxy only (`KnownProxies`). Without it the login rate limiter sees one address (the proxy) for everyone, and the cookie's `SameAsRequest` secure flag sees plain http
   - Set `ForwardedHeaders__KnownProxies__0` to NPM's address. An empty list leaves the middleware out of the pipeline entirely, which is what a direct LAN run wants
   - The framework's default trusted networks are cleared: honouring `X-Forwarded-For` from anyone would let a caller claim any address and walk around the login rate limit. `ForwardedHeaderTests` pins this
@@ -286,7 +289,7 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 ## Misc / Cosmetic
 
 - [ ] App icon and favicon
-- [ ] Docker logo for the Unraid dockers page
+- [x] Docker logo for the Unraid dockers page — the template points at `icon-192.png` on raw.githubusercontent.com
 - [x] Empty state for a fresh list
 - [ ] Import: paste a block of text, one item per line, bulk-add with categorization suggestions
 

@@ -1,0 +1,87 @@
+<?xml version="1.0"?>
+<!--
+  Unraid container template for Allo.
+
+  Add it from the Docker tab: Add Container, then paste this file's raw URL into the
+  "Template" box at the top, or drop the file into
+  /boot/config/plugins/dockerMan/templates-user/ on the flash drive and pick "Allo"
+  from the template dropdown.
+
+  Unraid pulls a prebuilt image from GHCR; it never builds from source. The image is
+  published by .github/workflows/docker-image.yml when a v* tag is pushed.
+
+  Pin a version tag rather than tracking :latest, so an update is something you choose.
+-->
+<Container version="2">
+  <Name>Allo</Name>
+  <Repository>ghcr.io/jamesakidd/allo:latest</Repository>
+  <Registry>https://github.com/jamesakidd/allo/pkgs/container/allo</Registry>
+  <Project>https://github.com/jamesakidd/allo</Project>
+  <Support>https://github.com/jamesakidd/allo/issues</Support>
+  <Overview>
+    Self-hosted family shopping list. Offline-first PWA: the list works with the network
+    off and reconciles when it comes back.
+
+    All state lives in one /appdata volume - the SQLite database and the cookie
+    encryption keys. Back up both together, and never delete the keys: losing them logs
+    every family member out.
+
+    On first run only, Admin__Username and Admin__InitialPassword create the first
+    account, which must change its password at first login. Leave them set or clear them
+    afterwards; they are ignored once an account exists.
+  </Overview>
+  <Category>Productivity: HomeAutomation:</Category>
+  <Network>br0</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <Icon>https://raw.githubusercontent.com/jamesakidd/allo/master/Allo.Client/wwwroot/icon-192.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+
+  <Config Name="WebUI Port" Target="8080" Default="8080" Mode="tcp"
+          Description="The app listens here. On br0 with its own IP this is the port Nginx Proxy Manager forwards to."
+          Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+
+  <Config Name="App Data" Target="/appdata" Default="/mnt/user/appdata/allo" Mode="rw"
+          Description="Holds the SQLite database AND the data protection keys. Both must survive a container update. Back this whole folder up."
+          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/allo</Config>
+
+  <Config Name="Admin Username" Target="Admin__Username" Default="" Mode=""
+          Description="First account, created only when no account exists yet."
+          Type="Variable" Display="always" Required="false" Mask="false"/>
+
+  <Config Name="Admin Initial Password" Target="Admin__InitialPassword" Default="" Mode=""
+          Description="Temporary password for the first account. Minimum 8 characters. The app forces a change at first login."
+          Type="Variable" Display="always" Required="false" Mask="true"/>
+
+  <Config Name="Admin Display Name" Target="Admin__DisplayName" Default="" Mode=""
+          Description="Name shown on the first account, e.g. your first name."
+          Type="Variable" Display="always" Required="false" Mask="false"/>
+
+  <Config Name="Reverse Proxy Address" Target="ForwardedHeaders__KnownProxies__0" Default="" Mode=""
+          Description="Nginx Proxy Manager's IP address. Without it the login rate limiter treats the whole family as one client, and the auth cookie is never marked Secure. Only this address is trusted to set X-Forwarded-For, so leave it blank if nothing proxies to this container."
+          Type="Variable" Display="always" Required="false" Mask="false"/>
+
+  <Config Name="Login Attempts Per Minute" Target="Auth__LoginAttemptsPerMinute" Default="5" Mode=""
+          Description="Failed logins allowed per client address per minute before a 429."
+          Type="Variable" Display="advanced" Required="false" Mask="false">5</Config>
+
+  <Config Name="Database Path" Target="ConnectionStrings__Default" Default="Data Source=/appdata/allo.db" Mode=""
+          Description="Leave this alone unless you are moving the database. It must stay inside the App Data volume."
+          Type="Variable" Display="advanced" Required="false" Mask="false">Data Source=/appdata/allo.db</Config>
+
+  <Config Name="Data Protection Keys Path" Target="DataProtection__KeysPath" Default="/appdata/keys" Mode=""
+          Description="Where the cookie encryption keys live. Leave this alone: if it ever points outside the App Data volume, every container update logs the whole family out."
+          Type="Variable" Display="advanced" Required="false" Mask="false">/appdata/keys</Config>
+
+  <Config Name="TZ" Target="TZ" Default="" Mode=""
+          Description="Container timezone for log timestamps, e.g. America/Toronto. Blank means UTC. Stored timestamps are UTC regardless, so this only affects the log."
+          Type="Variable" Display="advanced" Required="false" Mask="false"/>
+</Container>
