@@ -185,7 +185,8 @@ every change) so it's testable without a browser; the Razor pages are a thin she
 - [x] Check off / uncheck, with checked items collapsing to the bottom of their category
 - [x] Group by category, sorted by the active store's `StoreCategoryOrder`, subcategories staying with their parent
 - [x] Store selector at the top, re-sorting the same list into that store's walking order (verified: after moving Bakery above Produce globally, a store keeps its own order)
-- [x] Store view shows that store's entries plus anything with no store assigned
+- [x] Store view shows that store's entries plus anything with no store assigned (the store dropdown is a filter first: picking one hides other stores' items, "Any store" shows everything)
+- [x] Store pill on the entry row, shown wherever the entry has a store; entries with no store show none. Adding while a store is selected attaches that store
 - [x] Clear checked items (soft delete, tombstoned)
 - [x] Edit entry (quantity, unit, note, category, store) — tags land with the Tags section
 - [x] Second list support for watch-list style items (`/lists`: add, rename, delete; a list selector appears once there's more than one)

@@ -213,3 +213,8 @@ h1:focus {
 .manage-row:last-child {
     border-bottom: none;
 }
+
+.store-pill {
+    font-size: 0.7rem;
+    height: 1.25rem;
+}

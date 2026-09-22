@@ -53,7 +53,7 @@
             </div>
             foreach (var entry in group.Entries)
             {
-                <EntryRow @key="entry.Id" Entry="entry" Name="@ItemName(entry)"
+                <EntryRow @key="entry.Id" Entry="entry" Name="@ItemName(entry)" StoreName="@StoreName(entry)"
                           OnToggle="@(checkedNow => ToggleAsync(entry, checkedNow))"
                           OnEdit="@(() => EditAsync(entry))" />
             }
@@ -120,6 +120,10 @@
 
     private string ItemName(ListEntry entry) =>
         Store.Items.FirstOrDefault(i => i.Id == entry.ItemId)?.Name ?? "Item";
+
+    private string? StoreName(ListEntry entry) => entry.StoreId is { } id
+        ? Store.Stores.FirstOrDefault(s => s.Id == id)?.Name
+        : null;
 
     private Task ToggleAsync(ListEntry entry, bool isChecked) => Actions.SetCheckedAsync(entry, isChecked, UserId);
 

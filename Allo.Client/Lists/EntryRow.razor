@@ -12,6 +12,13 @@
             {
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Class="ma-0">@Quantity</MudChip>
             }
+            @* Which store this one is for. Items with no store show nothing: they're
+               everywhere anyway, and that's most of a list. *@
+            @if (StoreName is { Length: > 0 })
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                         Class="ma-0 store-pill">@StoreName</MudChip>
+            }
         </div>
         @if (!string.IsNullOrWhiteSpace(Entry.Note))
         {
@@ -23,6 +30,7 @@
 @code {
     [Parameter, EditorRequired] public ListEntry Entry { get; set; } = null!;
     [Parameter, EditorRequired] public string Name { get; set; } = "";
+    [Parameter] public string? StoreName { get; set; }
     [Parameter] public EventCallback<bool> OnToggle { get; set; }
     [Parameter] public EventCallback OnEdit { get; set; }
 
