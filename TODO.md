@@ -32,12 +32,26 @@ of the user seeing their own change.
 
 ### Data model
 
+Entity classes are plain POCOs in `Allo.Shared/Models`, shared by the API and the client's
+offline store. All EF configuration lives in `Allo.Api` (fluent API, no attributes), so
+the WASM client never references EF.
+
+**Every table except `User` syncs** and inherits `SyncEntity`: `sequence`, `isDeleted`,
+`updatedAt`, `updatedBy`. One global counter feeds all tables, so the client keeps a
+single cursor. Rows are never hard deleted (`SaveChanges` throws), and every FK is
+`Restrict`.
+
+- `User` (id, displayName) — minimal until the Auth phase adds credentials. Not synced
 - `ShoppingList` (id, name) — defaults to one list, supports a second for the
-  "watch list" style use Flipp had
-- `Store` (id, name)
-- `Category` (id, name, parentId nullable) — adjacency list, global, not per-store
+  "watch list" style use Flipp had. Seeded "Groceries" with a fixed id
+- `Store` (id, name) — none seeded
+- `Category` (id, name, parentId nullable, sortOrder) — adjacency list, global, not
+  per-store. `sortOrder` is the default walking order, relative to siblings; it applies
+  when no store is selected and is copied into `StoreCategoryOrder` for a new store.
+  Seeded with fixed ids; Uncategorized has a well-known id (`Category.UncategorizedId`)
 - `StoreCategoryOrder` (storeId, categoryId, sortOrder) — each store defines its own
-  walking order over the shared categories
+  walking order over the shared categories. Keyed on (storeId, categoryId), not its own
+  id, so two devices ordering the same store offline update one row, not create two
 - `Item` (id, name, defaultCategoryId, defaultUnit, aliases, defaultTags, notes, lastUsedAt)
   — the reusable catalog, separate from list entries. `defaultUnit` pre-fills the entry's
   unit ("ground beef" → `lb`, "bananas" → `bunch`), overridable per entry
@@ -120,13 +134,15 @@ No SignalR in v1. Refresh on app focus plus pull-to-refresh is enough.
 
 ## Data Model
 
-- [ ] `Category` with self-referencing `ParentId`, seeded top-level set (Produce, Bakery, Dairy, Meat & Seafood, Frozen, Pantry, Beverages, Snacks, Household, Personal Care, Baby, Pet, Uncategorized)
-- [ ] `Store` + `StoreCategoryOrder`, with a sensible default order applied to any new store
-- [ ] `Unit` enum in `Allo.Shared` (`ea`, `g`, `kg`, `lb`, `ml`, `l`, `gal`, `bunch`, `dozen`), with an `IsCountUnit` helper; EF `HasConversion<string>()` and `JsonStringEnumConverter` so it's never stored or sent as an int
-- [ ] `Item` catalog table with `DefaultUnit`, and `Aliases` and `DefaultTags` as JSON columns
-- [ ] `ShoppingList` + `ListEntry`, with `CategoryId`, `AddedBy`, `UpdatedAt`, `UpdatedBy`, `IsChecked`, `CheckedAt`, `CheckedBy`, `IsDeleted`, `Sequence`
-- [ ] Sequence counter (change-log table or single counter row) that stamps `ListEntry.Sequence` on every accepted change
-- [ ] Index on `ListEntry.Sequence` (every sync pull filters on it)
+- [x] `SyncEntity` base, minimal `User` table, entities in `Allo.Shared`, EF config in `Allo.Api`
+- [x] `Category` with self-referencing `ParentId`, seeded top-level set (Produce, Bakery, Dairy, Meat & Seafood, Frozen, Pantry, Beverages, Snacks, Household, Personal Care, Baby, Pet, Uncategorized)
+- [x] `Store` + `StoreCategoryOrder` tables, `Category.SortOrder` as the default walking order
+- [ ] Copy `Category.SortOrder` into `StoreCategoryOrder` when a store is created (lands with the store create endpoint)
+- [x] `Unit` enum in `Allo.Shared` (`ea`, `g`, `kg`, `lb`, `ml`, `l`, `gal`, `bunch`, `dozen`), members named in full (`Unit.Kilogram`) with `IsCountUnit`/`ToCode`/`FromCode` helpers; EF `UnitConverter` and `[JsonStringEnumMemberName]` store and send the lowercase code, never an int
+- [x] `Item` catalog table with `DefaultUnit`, and `Aliases` and `DefaultTags` as JSON columns
+- [x] `ShoppingList` + `ListEntry`, with `CategoryId`, `AddedBy`, `UpdatedAt`, `UpdatedBy`, `IsChecked`, `CheckedAt`, `CheckedBy`, `IsDeleted`, `Sequence`
+- [x] Sequence counter: single-row `SyncCounter` table, reserved in `SaveChanges` inside the write transaction, stamps `Sequence` on every synced table
+- [x] Index on `Sequence` for every synced table (every sync pull filters on it)
 
 ## Catalog & Categorization
 
@@ -172,9 +188,10 @@ No SignalR in v1. Refresh on app focus plus pull-to-refresh is enough.
 - [ ] `POST /api/sync` accepting a batch of client changes, LWW resolution server-side
 - [ ] Sync on app focus, on reconnect, and on pull-to-refresh
 - [ ] Sync status indicator: last synced time and pending change count. Not a spinner. "3 changes pending" reads as working, an ambiguous spinner reads as broken
+- [ ] Duplicate catalog items: two devices can create "oat milk" offline with different ids (`Item.NormalizedName` is deliberately not unique). Sync must merge them: keep one, repoint entries, tombstone the other
 - [ ] Test properly in airplane mode: add, check off, edit, delete, then reconnect
 - [ ] Split checked state into its own resolution field set: `IsChecked`, `CheckedAt`, `CheckedBy`, resolved independently of the `UpdatedAt` that covers quantity, unit, note, category, and tags. Two resolution rules per entry, not one. Handles the real collision: she changes milk 1 to 2 while you check milk off, both offline. Plain row-level LWW loses one of those changes. Do this before building sync, not after (retrofitting means a migration and a protocol change)
-- [ ] Server-side monotonic sequence counter instead of timestamps for the sync cursor. Every accepted change gets the next number; client cursor is that number, pull is "everything with seq > N". Immune to phone clock drift, which otherwise lets a device that is 10 minutes fast win every conflict for 10 minutes. SQLite has no `rowversion`, so use an AUTOINCREMENT change-log table or a single counter row
+- [x] Server-side monotonic sequence counter instead of timestamps for the sync cursor. Every accepted change gets the next number; client cursor is that number, pull is "everything with seq > N". Immune to phone clock drift, which otherwise lets a device that is 10 minutes fast win every conflict for 10 minutes. SQLite has no `rowversion`, so use an AUTOINCREMENT change-log table or a single counter row
 
 ## PWA & Mobile UX
 
