@@ -1,0 +1,74 @@
+@using Allo.Shared.Lists
+@using Allo.Shared.Sync
+@inject LocalStore Store
+
+@* The entry's tags, plus one tap to add a known one or type a new one. *@
+<MudStack Spacing="2">
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">Tags</MudText>
+    @if (Tags.Count > 0)
+    {
+        <div class="tag-editor">
+            @foreach (var tag in Tags)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                         OnClose="@(() => RemoveAsync(tag))" Class="ma-0">@tag</MudChip>
+            }
+        </div>
+    }
+    <MudAutocomplete T="string" @bind-Value="_typed" Label="Add a tag" Variant="Variant.Outlined"
+                     Margin="Margin.Dense" SearchFunc="SearchAsync" CoerceValue="true" Clearable="true"
+                     ResetValueOnEmptyText="true" MaxItems="8" @bind-Value:after="AddTypedAsync" />
+    @if (Unused.Count > 0)
+    {
+        <div class="tag-editor">
+            @foreach (var tag in Unused)
+            {
+                <span class="tag-chip tag-suggestion" @onclick="@(() => AddAsync(tag))">+ @tag</span>
+            }
+        </div>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public List<string> Tags { get; set; } = [];
+    [Parameter] public EventCallback<List<string>> TagsChanged { get; set; }
+
+    private string? _typed;
+
+    // A few tags not already on this entry, most used first.
+    private IReadOnlyList<string> Unused => [.. Allo.Shared.Lists.Tags.Known(Store)
+        .Where(t => !Tags.Contains(t)).Take(6)];
+
+    private Task<IEnumerable<string>> SearchAsync(string? value, CancellationToken token) =>
+        Task.FromResult(Allo.Shared.Lists.Tags.Known(Store)
+            .Where(t => !Tags.Contains(t)
+                && (string.IsNullOrWhiteSpace(value) || t.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .AsEnumerable());
+
+    private async Task AddTypedAsync()
+    {
+        if (_typed is { Length: > 0 })
+        {
+            var tag = _typed;
+            _typed = null;
+            await AddAsync(tag);
+        }
+    }
+
+    private async Task AddAsync(string tag)
+    {
+        var normalized = Allo.Shared.Lists.Tags.Normalize(tag);
+        if (normalized.Length == 0 || Tags.Contains(normalized))
+        {
+            return;
+        }
+        Tags.Add(normalized);
+        await TagsChanged.InvokeAsync(Tags);
+    }
+
+    private async Task RemoveAsync(string tag)
+    {
+        Tags.Remove(tag);
+        await TagsChanged.InvokeAsync(Tags);
+    }
+}

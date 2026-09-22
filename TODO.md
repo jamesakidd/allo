@@ -197,12 +197,13 @@ every change) so it's testable without a browser; the Razor pages are a thin she
 
 ## Tags
 
-- [ ] Free-form tags on `ListEntry`, autocomplete off existing tags
-- [ ] `DefaultTags` on catalog items, applied on add, overridable per entry
-- [ ] Seed suggested tags: `if on sale`, `urgent`, `next trip`, `bulk`, `check price`, `optional`, `exact brand`
-- [ ] Visual treatment on the list row (small chips, not full-width, must not crowd the item name)
-- [ ] Filter the list by tag
-- [ ] Guardrail: tags must never affect sort order
+- [x] Free-form tags on `ListEntry`, autocomplete off existing tags (tag editor in the edit sheet: chips with autocomplete, plus one-tap suggestions)
+- [x] Type tags while adding: `ribeye #sale`. Single word per `#tag`; multi-word tags go in via the editor
+- [x] `DefaultTags` on catalog items, applied on add, overridable per entry. Learned like units: the same tags typed twice in a row become the item's defaults (`Item.PendingTags`). Adding with no tags means "use the defaults", so it never clears them
+- [x] Seed suggested tags: `if on sale`, `urgent`, `next trip`, `bulk`, `check price`, `optional`, `exact brand` (offered until real ones exist; used tags rank first)
+- [x] Visual treatment on the list row (small chips, not full-width, must not crowd the item name): under the name, muted, below the store pill
+- [x] Filter the list by tag: a chip row under the selectors, only when something on the list is tagged. Filters both the live list and the cart
+- [x] Guardrail: tags must never affect sort order (covered by a test)
 
 ## Offline & Sync
 

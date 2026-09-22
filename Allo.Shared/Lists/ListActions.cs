@@ -11,23 +11,29 @@ public sealed record AddOutcome(ListEntry Entry, Item Item, MatchKind Match, boo
 // Every list action. They write to the device and return at once; syncing happens after.
 public sealed class ListActions(LocalStore store, TimeProvider time)
 {
-    // Adds typed text to a list. The catalog decides the category and unit: an exact match
-    // silently, a partial match as a suggestion the caller should show. Adding something
-    // already on the list adds one to it instead of making a second row.
+    // Adds typed text to a list. Any #tags in the text are pulled out first. The catalog
+    // decides the category and unit: an exact match silently, a partial match as a
+    // suggestion the caller should show. Adding something already on the list adds one to
+    // it instead of making a second row.
     public async Task<AddOutcome> AddAsync(string text, Guid listId, Guid userId, Guid? storeId = null,
         Guid? categoryId = null, Unit? unit = null, decimal quantity = 1)
     {
-        var match = new CatalogMatcher(store.Items).Match(text);
+        var typed = Tags.Parse(text);
+        var match = new CatalogMatcher(store.Items).Match(typed.Text);
         var category = categoryId ?? match.CategoryId;
         var chosenUnit = unit ?? match.Unit;
-        var item = CatalogLearning.RecordAdd(match, text, category, chosenUnit, userId, time.GetUtcNow());
+        var item = CatalogLearning.RecordAdd(match, typed.Text, category, chosenUnit, userId, time.GetUtcNow(),
+            typed.Tags.Count > 0 ? typed.Tags : null);
         await store.SaveAsync(item);
+        // Typed tags win; otherwise the item's usual ones come along.
+        var tags = typed.Tags.Count > 0 ? typed.Tags : Tags.Normalize(item.DefaultTags);
 
         var existing = ListView.Entries(store, listId, storeId: null)
             .FirstOrDefault(e => e.ItemId == item.Id && !e.IsChecked && e.Unit == chosenUnit);
         if (existing is not null)
         {
             existing.Quantity += quantity;
+            existing.Tags = [.. existing.Tags.Union(tags)];
             await store.SaveAsync(existing);
             return new AddOutcome(existing, item, match.Kind, MergedWithExisting: true);
         }
@@ -41,7 +47,7 @@ public sealed class ListActions(LocalStore store, TimeProvider time)
             Quantity = quantity,
             Unit = chosenUnit,
             StoreId = storeId,
-            Tags = [.. item.DefaultTags],
+            Tags = [.. tags],
             AddedBy = userId,
         };
         await store.SaveAsync(entry);

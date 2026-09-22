@@ -19,6 +19,15 @@
                 <span class="store-pill" style="@StoreStyle">@StoreName</span>
             }
         </div>
+        @if (Entry.Tags.Count > 0)
+        {
+            <div class="entry-tags">
+                @foreach (var tag in Entry.Tags)
+                {
+                    <span class="tag-chip">@tag</span>
+                }
+            </div>
+        }
         @if (!string.IsNullOrWhiteSpace(Entry.Note))
         {
             <MudText Typo="Typo.caption" Class="mud-text-secondary">@Entry.Note</MudText>

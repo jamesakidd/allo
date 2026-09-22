@@ -1,3 +1,4 @@
+using Allo.Shared.Lists;
 using Allo.Shared.Models;
 
 namespace Allo.Shared.Catalog;
@@ -8,7 +9,7 @@ public static class CatalogLearning
     // point at: the matched item (updated in place) or a newly created one. The caller
     // persists it. categoryId and unit are what the user finally chose, not the suggestion.
     public static Item RecordAdd(CatalogMatch match, string typedName, Guid categoryId, Unit unit,
-        Guid userId, DateTimeOffset now)
+        Guid userId, DateTimeOffset now, IReadOnlyList<string>? tags = null)
     {
         var item = match.Kind == MatchKind.Exact && match.Item is not null
             ? match.Item
@@ -17,6 +18,10 @@ public static class CatalogLearning
         // Categories are user-owned: an explicit change is a correction, applied at once.
         item.DefaultCategoryId = categoryId;
         ApplyUnit(item, unit);
+        if (tags is not null)
+        {
+            ApplyTags(item, tags);
+        }
 
         item.UseCount++;
         item.LastUsedAt = now;
@@ -40,6 +45,25 @@ public static class CatalogLearning
         else
         {
             item.PendingUnit = unit;
+        }
+    }
+
+    // The same tags typed twice in a row become the item's defaults. Adding with no tags
+    // means "use the defaults", so it never clears them; remove those on the entry itself.
+    private static void ApplyTags(Item item, IReadOnlyList<string> tags)
+    {
+        if (Tags.SameSet(tags, item.DefaultTags))
+        {
+            item.PendingTags = [];
+        }
+        else if (Tags.SameSet(tags, item.PendingTags))
+        {
+            item.DefaultTags = Tags.Normalize(tags);
+            item.PendingTags = [];
+        }
+        else
+        {
+            item.PendingTags = Tags.Normalize(tags);
         }
     }
 

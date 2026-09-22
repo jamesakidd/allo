@@ -1,5 +1,6 @@
 using Allo.Api.Data;
 using Allo.Shared.Catalog;
+using Allo.Shared.Lists;
 using Allo.Shared.Models;
 using Allo.Shared.Sync;
 using Microsoft.EntityFrameworkCore;
@@ -200,7 +201,8 @@ public sealed class SyncApplier(AppDbContext db, Guid userId)
         to.DefaultUnit = from.DefaultUnit;
         to.PendingUnit = from.PendingUnit;
         to.Aliases = [.. from.Aliases.Select(CatalogText.Normalize)];
-        to.DefaultTags = [.. from.DefaultTags];
+        to.DefaultTags = [.. from.DefaultTags.Select(Tags.Normalize)];
+        to.PendingTags = [.. from.PendingTags.Select(Tags.Normalize)];
         to.Notes = from.Notes;
         to.LastUsedAt = from.LastUsedAt;
         to.UseCount = from.UseCount;

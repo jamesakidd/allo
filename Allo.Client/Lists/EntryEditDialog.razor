@@ -53,6 +53,8 @@
             <MudTextField @bind-Value="_note" Label="Note" Variant="Variant.Outlined" Margin="Margin.Dense"
                           MaxLength="500" />
 
+            <TagEditor Tags="_tags" />
+
             @if (_error is not null)
             {
                 <MudAlert Severity="Severity.Error" Dense="true">@_error</MudAlert>
@@ -77,6 +79,7 @@
     private Guid _categoryId;
     private Guid? _storeId;
     private string? _note;
+    private List<string> _tags = [];
     private string? _error;
 
     private string ItemName => Store.Items.FirstOrDefault(i => i.Id == Entry.ItemId)?.Name ?? "Item";
@@ -90,6 +93,7 @@
     {
         (_quantity, _unit, _categoryId, _storeId, _note) =
             (Entry.Quantity, Entry.Unit, Entry.CategoryId, Entry.StoreId, Entry.Note);
+        _tags = [.. Entry.Tags];
     }
 
     private void Bump(int by) => _quantity = Math.Max(1, _quantity + by);
@@ -101,7 +105,7 @@
         var candidate = new ListEntry
         {
             Id = Entry.Id, ListId = Entry.ListId, ItemId = Entry.ItemId, CategoryId = _categoryId,
-            Quantity = _quantity, Unit = _unit, Note = note, StoreId = _storeId, Tags = Entry.Tags,
+            Quantity = _quantity, Unit = _unit, Note = note, StoreId = _storeId, Tags = _tags,
         };
         if (SyncValidation.Validate(candidate) is { } error)
         {
@@ -113,6 +117,7 @@
         Entry.Unit = _unit;
         Entry.StoreId = _storeId;
         Entry.Note = note;
+        Entry.Tags = [.. _tags];
         await Actions.SetCategoryAsync(Entry, _categoryId, UserId);
         await Store.SaveAsync(Entry);
         Dialog.Close(DialogResult.Ok(true));

@@ -18,7 +18,7 @@ public sealed record ListSections(IReadOnlyList<EntryGroup> ToBuy, IReadOnlyList
 // in the active store's walking order.
 public static class ListView
 {
-    public static ListSections Build(LocalStore store, Guid listId, Guid? storeId)
+    public static ListSections Build(LocalStore store, Guid listId, Guid? storeId, string? tag = null)
     {
         var categories = store.Categories.Where(c => !c.IsDeleted).ToDictionary(c => c.Id);
         var uncategorized = categories.GetValueOrDefault(Category.UncategorizedId)
@@ -29,7 +29,9 @@ public static class ListView
                 .ToDictionary(o => o.CategoryId, o => o.SortOrder)
             : [];
 
-        var entries = Entries(store, listId, storeId).ToList();
+        var entries = Entries(store, listId, storeId)
+            .Where(e => tag is null || Tags.Has(e, tag))
+            .ToList();
         return new ListSections(
             Group(entries.Where(e => !e.IsChecked)),
             Group(entries.Where(e => e.IsChecked)));

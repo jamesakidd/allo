@@ -296,3 +296,60 @@ h1:focus {
     justify-content: space-between;
     padding: 0.25rem 0.25rem 0;
 }
+
+/* Tags: small and under the name, so they never crowd the item itself. */
+.entry-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.15rem;
+}
+
+.tag-chip {
+    display: inline-block;
+    padding: 0.05rem 0.45rem;
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.09);
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.68rem;
+    line-height: 1.15rem;
+    white-space: nowrap;
+}
+
+.tag-filter {
+    display: flex;
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding: 0 0.25rem 0.5rem;
+    scrollbar-width: none;
+}
+
+    .tag-filter::-webkit-scrollbar {
+        display: none;
+    }
+
+.tag-filter-chip {
+    flex: 0 0 auto;
+    padding: 0.2rem 0.7rem;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 1rem;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.tag-filter-chip.selected {
+    border-color: var(--mud-palette-primary);
+    color: var(--mud-palette-primary);
+    background: rgba(102, 187, 106, 0.12);
+}
+
+.tag-editor {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.tag-suggestion {
+    cursor: pointer;
+}

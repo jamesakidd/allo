@@ -19,4 +19,8 @@ public class Item : SyncEntity
     // A non-default unit chosen on the last add. Chosen again on the next add, it becomes
     // DefaultUnit, so one odd purchase doesn't flip the default.
     public Unit? PendingUnit { get; set; }
+
+    // The same, for tags: tags typed on the last add, promoted to DefaultTags if the next
+    // add types them again.
+    public List<string> PendingTags { get; set; } = [];
 }

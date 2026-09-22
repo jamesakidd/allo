@@ -58,6 +58,17 @@
         </MudSelect>
     </div>
 
+    @if (_tagsInUse.Count > 0)
+    {
+        <div class="tag-filter">
+            @foreach (var tag in _tagsInUse)
+            {
+                <span class="tag-filter-chip @(_tag == tag ? "selected" : "")"
+                      @onclick="@(() => ToggleTagAsync(tag))">@tag</span>
+            }
+        </div>
+    }
+
     @if (_sections.IsEmpty)
     {
         <MudStack Spacing="1" AlignItems="AlignItems.Center" Class="empty-state">
@@ -95,6 +106,8 @@
     private ElementReference _scrollArea;
     private DotNetObjectReference<List>? _self;
     private ListSections _sections = new([], []);
+    private IReadOnlyList<string> _tagsInUse = [];
+    private string? _tag;
 
     private Guid UserId => Auth.User?.Id ?? Guid.Empty;
 
@@ -131,7 +144,19 @@
     private void Rebuild()
     {
         Ui.FallBackIfMissing();
-        _sections = ListView.Build(Store, Ui.ListId, Ui.StoreId);
+        _tagsInUse = Allo.Shared.Lists.Tags.InUse(Store, Ui.ListId, Ui.StoreId);
+        if (_tag is not null && !_tagsInUse.Contains(_tag))
+        {
+            _tag = null;
+        }
+        _sections = ListView.Build(Store, Ui.ListId, Ui.StoreId, _tag);
+    }
+
+    private Task ToggleTagAsync(string tag)
+    {
+        _tag = _tag == tag ? null : tag;
+        Rebuild();
+        return InvokeAsync(StateHasChanged);
     }
 
     private string ItemName(ListEntry entry) =>
