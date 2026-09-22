@@ -1,0 +1,106 @@
+@page "/lists"
+@using Allo.Shared.Lists
+@using Allo.Shared.Models
+@using Allo.Shared.Sync
+@implements IDisposable
+@inject LocalStore Store
+@inject ListActions Actions
+@inject UiState Ui
+@inject AlloAuthStateProvider Auth
+@inject IDialogService Dialogs
+
+<PageTitle>Lists · allo</PageTitle>
+
+<MudStack Spacing="4">
+    <MudText Typo="Typo.h5">Lists</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+        A second list is handy for things you're watching for rather than buying this trip.
+    </MudText>
+
+    <MudPaper Elevation="0" Outlined="true">
+        @foreach (var list in AllLists)
+        {
+            <div class="manage-row">
+                <MudText Typo="Typo.body1">@list.Name</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary ml-2">@Count(list.Id)</MudText>
+                <MudSpacer />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Medium"
+                               OnClick="@(() => RenameAsync(list))" aria-label="@($"Rename {list.Name}")" />
+                @if (AllLists.Count > 1)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Medium"
+                                   OnClick="@(() => DeleteAsync(list))" aria-label="@($"Delete {list.Name}")" />
+                }
+            </div>
+        }
+    </MudPaper>
+
+    <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.subtitle1">Add a list</MudText>
+            <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          MaxLength="100" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddAsync">Add</MudButton>
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private string _name = "";
+
+    private Guid UserId => Auth.User?.Id ?? Guid.Empty;
+
+    private List<ShoppingList> AllLists => [.. Store.Lists.Where(l => !l.IsDeleted).OrderBy(l => l.Name)];
+
+    protected override void OnInitialized() => Store.Changed += Refresh;
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    private string Count(Guid listId)
+    {
+        var count = ListView.Entries(Store, listId, null).Count(e => !e.IsChecked);
+        return count == 1 ? "1 item" : $"{count} items";
+    }
+
+    private async Task AddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            return;
+        }
+        await Actions.CreateListAsync(_name, UserId);
+        _name = "";
+    }
+
+    private async Task RenameAsync(ShoppingList list)
+    {
+        if (await Prompts.RenameAsync(Dialogs, "Rename list", list.Name) is { } name)
+        {
+            list.Name = name;
+            list.UpdatedBy = UserId;
+            await Store.SaveAsync(list);
+        }
+    }
+
+    private async Task DeleteAsync(ShoppingList list)
+    {
+        var entries = ListView.Entries(Store, list.Id, null).ToList();
+        var confirmed = await Dialogs.ShowMessageBoxAsync($"Delete {list.Name}?",
+            entries.Count == 0 ? "The list is empty." : $"{entries.Count} items on it will go too.",
+            yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
+        foreach (var entry in entries)
+        {
+            await Store.DeleteAsync(entry);
+        }
+        list.UpdatedBy = UserId;
+        await Store.DeleteAsync(list);
+        Ui.FallBackIfMissing();
+        await Ui.SetListAsync(Ui.ListId);
+    }
+
+    public void Dispose() => Store.Changed -= Refresh;
+}

@@ -78,3 +78,138 @@ h1:focus {
         right: 0.75rem;
         top: 0.6rem;
     }
+
+/* ---- List screen ---------------------------------------------------------
+   Sized for one hand in a store: big rows, a generous checkbox area, and an
+   add bar pinned above the keyboard. */
+
+.list-page {
+    padding-bottom: 8.5rem; /* clears the add bar */
+    transform: translateY(var(--allo-pull, 0px));
+    transition: transform 0.15s ease-out;
+}
+
+.list-selectors {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.25rem 0 0.5rem;
+}
+
+    .list-selectors > * {
+        flex: 1;
+    }
+
+.category-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 0.75rem 0.25rem 0.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.entry-row {
+    display: flex;
+    align-items: center;
+    min-height: 3rem;
+    gap: 0.25rem;
+}
+
+.entry-body {
+    flex: 1;
+    padding: 0.5rem 0.25rem;
+    cursor: pointer;
+    min-width: 0;
+}
+
+.entry-name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.entry-checked .entry-body {
+    opacity: 0.5;
+    text-decoration: line-through;
+}
+
+.empty-state {
+    padding: 4rem 1rem;
+}
+
+.clear-checked {
+    display: flex;
+    justify-content: center;
+    padding: 1rem 0 0;
+}
+
+/* ---- Add bar ---- */
+
+.add-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 0.5rem max(0.75rem, env(safe-area-inset-left)) calc(0.5rem + env(safe-area-inset-bottom));
+    background: #1b1d21;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 1200;
+}
+
+.add-suggestions {
+    max-height: 13rem;
+    overflow-y: auto;
+    margin-bottom: 0.5rem;
+}
+
+.add-suggestion {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+}
+
+    .add-suggestion:active {
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+.add-feedback {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0 0.25rem 0.25rem;
+}
+
+/* ---- Dialogs and manage screens ---- */
+
+.quantity-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.quantity-value {
+    min-width: 2.5rem;
+    text-align: center;
+}
+
+.unit-select {
+    flex: 1;
+}
+
+.manage-row {
+    display: flex;
+    align-items: center;
+    min-height: 3rem;
+    padding: 0.25rem 0.5rem 0.25rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.manage-row-child {
+    padding-left: 2.5rem;
+}
+
+.manage-row:last-child {
+    border-bottom: none;
+}

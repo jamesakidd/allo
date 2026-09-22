@@ -1,0 +1,92 @@
+@using Allo.Shared.Catalog
+@using Allo.Shared.Lists
+@using Allo.Shared.Models
+@using Allo.Shared.Sync
+@inject LocalStore Store
+@inject ListActions Actions
+
+@* Fixed above the keyboard: type, press enter, keep typing. The category it picked shows
+   as a chip that changes in one tap; nothing blocks the next item. *@
+<div class="add-bar">
+    @if (_suggestions.Count > 0)
+    {
+        <MudPaper Class="add-suggestions" Elevation="6">
+            @foreach (var item in _suggestions)
+            {
+                <div class="add-suggestion" @onclick="@(() => AddAsync(item.Name))">
+                    <MudText Typo="Typo.body2">@item.Name</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@CategoryName(item.DefaultCategoryId)</MudText>
+                </div>
+            }
+        </MudPaper>
+    }
+    @if (_lastAdded is not null)
+    {
+        <div class="add-feedback">
+            <MudText Typo="Typo.caption">@_lastAddedText</MudText>
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                       Style="text-transform: none;" OnClick="ChangeCategoryAsync">
+                @CategoryName(_lastAdded.CategoryId)
+            </MudButton>
+        </div>
+    }
+    <div class="add-input">
+        <MudTextField @ref="_input" @bind-Value="_text" @bind-Value:after="OnTextChanged"
+                      Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Placeholder="Add an item" Adornment="Adornment.End"
+                      AdornmentIcon="@Icons.Material.Filled.Add" OnAdornmentClick="@(() => AddAsync(_text))"
+                      OnKeyDown="OnKeyDown" autocapitalize="none" autocomplete="off" />
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid ListId { get; set; }
+    [Parameter] public Guid? StoreId { get; set; }
+    [Parameter, EditorRequired] public Guid UserId { get; set; }
+    [Parameter] public EventCallback<ListEntry> OnPickCategory { get; set; }
+
+    private MudTextField<string>? _input;
+    private string _text = "";
+    private List<Item> _suggestions = [];
+    private ListEntry? _lastAdded;
+    private string _lastAddedText = "";
+
+    private void OnTextChanged() =>
+        _suggestions = _text.Trim().Length < 2
+            ? []
+            : [.. CatalogAutocomplete.Search(Store.Items, _text, DateTimeOffset.UtcNow, limit: 5)];
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or "NumpadEnter")
+        {
+            await AddAsync(_text);
+        }
+    }
+
+    private async Task AddAsync(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+        var outcome = await Actions.AddAsync(text, ListId, UserId, StoreId);
+        _lastAdded = outcome.Entry;
+        _lastAddedText = outcome.MergedWithExisting
+            ? $"{outcome.Item.Name} · now {outcome.Entry.Quantity:0.##}"
+            : outcome.Match == MatchKind.Exact ? outcome.Item.Name : $"{outcome.Item.Name} · check the category";
+        _text = "";
+        _suggestions = [];
+        // Keep the keyboard up for the next item.
+        if (_input is not null)
+        {
+            await _input.FocusAsync();
+        }
+    }
+
+    private Task ChangeCategoryAsync() =>
+        _lastAdded is null ? Task.CompletedTask : OnPickCategory.InvokeAsync(_lastAdded);
+
+    private string CategoryName(Guid categoryId) =>
+        Store.Categories.FirstOrDefault(c => c.Id == categoryId)?.Name ?? "Uncategorized";
+}

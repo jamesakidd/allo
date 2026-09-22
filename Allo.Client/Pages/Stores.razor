@@ -1,0 +1,102 @@
+@page "/stores"
+@using Allo.Shared.Lists
+@using Allo.Shared.Models
+@using Allo.Shared.Sync
+@implements IDisposable
+@inject LocalStore Store
+@inject ListActions Actions
+@inject AlloAuthStateProvider Auth
+@inject IDialogService Dialogs
+
+<PageTitle>Stores · allo</PageTitle>
+
+<MudStack Spacing="4">
+    <MudText Typo="Typo.h5">Stores</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+        Each store walks the aisles in its own order. Pick one at the top of the list to sort by it.
+    </MudText>
+
+    <MudPaper Elevation="0" Outlined="true">
+        @if (AllStores.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="pa-4 mud-text-secondary">No stores yet.</MudText>
+        }
+        @foreach (var store in AllStores)
+        {
+            <div class="manage-row">
+                <MudText Typo="Typo.body1">@store.Name</MudText>
+                <MudSpacer />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Medium"
+                               OnClick="@(() => RenameAsync(store))" aria-label="@($"Rename {store.Name}")" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Medium"
+                               OnClick="@(() => DeleteAsync(store))" aria-label="@($"Delete {store.Name}")" />
+            </div>
+        }
+    </MudPaper>
+
+    <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.subtitle1">Add a store</MudText>
+            <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          MaxLength="100" OnKeyDown="@(e => { if (e.Key == "Enter") return AddAsync(); return Task.CompletedTask; })" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddAsync">Add</MudButton>
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private string _name = "";
+
+    private Guid UserId => Auth.User?.Id ?? Guid.Empty;
+
+    private List<Store> AllStores => [.. Store.Stores.Where(s => !s.IsDeleted).OrderBy(s => s.Name)];
+
+    protected override void OnInitialized() => Store.Changed += Refresh;
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    private async Task AddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            return;
+        }
+        await Actions.CreateStoreAsync(_name, UserId);
+        _name = "";
+    }
+
+    private async Task RenameAsync(Store store)
+    {
+        if (await Prompts.RenameAsync(Dialogs, "Rename store", store.Name) is { } name)
+        {
+            store.Name = name;
+            store.UpdatedBy = UserId;
+            await Store.SaveAsync(store);
+        }
+    }
+
+    private async Task DeleteAsync(Store store)
+    {
+        var confirmed = await Dialogs.ShowMessageBoxAsync($"Delete {store.Name}?",
+            "Entries assigned to this store stay on the list, with no store.",
+            yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
+        foreach (var entry in Store.Entries.Where(e => !e.IsDeleted && e.StoreId == store.Id).ToList())
+        {
+            entry.StoreId = null;
+            entry.UpdatedBy = UserId;
+            await Store.SaveAsync(entry);
+        }
+        foreach (var order in Store.StoreCategoryOrders.Where(o => !o.IsDeleted && o.StoreId == store.Id).ToList())
+        {
+            await Store.DeleteAsync(order);
+        }
+        store.UpdatedBy = UserId;
+        await Store.DeleteAsync(store);
+    }
+
+    public void Dispose() => Store.Changed -= Refresh;
+}

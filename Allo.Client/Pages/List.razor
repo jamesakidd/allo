@@ -1,0 +1,162 @@
+@page "/"
+@using Allo.Shared.Lists
+@using Allo.Shared.Models
+@using Allo.Shared.Sync
+@implements IAsyncDisposable
+@inject LocalStore Store
+@inject ListActions Actions
+@inject UiState Ui
+@inject AlloAuthStateProvider Auth
+@inject SyncCoordinator Sync
+@inject IDialogService Dialogs
+@inject IJSRuntime Js
+
+<PageTitle>allo</PageTitle>
+
+<div class="list-page" @ref="_scrollArea">
+    <div class="list-selectors">
+        @if (Lists.Count > 1)
+        {
+            <MudSelect T="Guid" Value="Ui.ListId" ValueChanged="Ui.SetListAsync" Dense="true"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Label="List">
+                @foreach (var list in Lists)
+                {
+                    <MudSelectItem T="Guid" Value="@list.Id">@list.Name</MudSelectItem>
+                }
+            </MudSelect>
+        }
+        <MudSelect T="Guid?" Value="Ui.StoreId" ValueChanged="Ui.SetStoreAsync" Dense="true"
+                   Variant="Variant.Outlined" Margin="Margin.Dense" Label="Store">
+            <MudSelectItem T="Guid?" Value="@((Guid?)null)">Any store</MudSelectItem>
+            @foreach (var store in Stores)
+            {
+                <MudSelectItem T="Guid?" Value="@((Guid?)store.Id)">@store.Name</MudSelectItem>
+            }
+        </MudSelect>
+    </div>
+
+    @if (_groups.Count == 0)
+    {
+        <MudStack Spacing="1" AlignItems="AlignItems.Center" Class="empty-state">
+            <MudIcon Icon="@Icons.Material.Outlined.ShoppingCart" Size="Size.Large" Color="Color.Primary" />
+            <MudText Typo="Typo.subtitle1">Nothing on the list</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Add your first item below.</MudText>
+        </MudStack>
+    }
+    else
+    {
+        foreach (var group in _groups)
+        {
+            <div class="category-header">
+                <MudText Typo="Typo.overline">@group.Category.Name</MudText>
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">@group.UncheckedCount</MudText>
+            </div>
+            foreach (var entry in group.Entries)
+            {
+                <EntryRow @key="entry.Id" Entry="entry" Name="@ItemName(entry)"
+                          OnToggle="@(checkedNow => ToggleAsync(entry, checkedNow))"
+                          OnEdit="@(() => EditAsync(entry))" />
+            }
+        }
+
+        @if (_checkedCount > 0)
+        {
+            <div class="clear-checked">
+                <MudButton Variant="Variant.Text" Color="Color.Default" Style="text-transform: none;"
+                           StartIcon="@Icons.Material.Filled.ClearAll" OnClick="ClearCheckedAsync">
+                    Clear @_checkedCount checked
+                </MudButton>
+            </div>
+        }
+    }
+</div>
+
+<AddBar ListId="Ui.ListId" StoreId="Ui.StoreId" UserId="UserId" OnPickCategory="PickCategoryAsync" />
+
+@code {
+    private ElementReference _scrollArea;
+    private DotNetObjectReference<List>? _self;
+    private IReadOnlyList<EntryGroup> _groups = [];
+    private int _checkedCount;
+
+    private Guid UserId => Auth.User?.Id ?? Guid.Empty;
+
+    private List<ShoppingList> Lists => [.. Store.Lists.Where(l => !l.IsDeleted).OrderBy(l => l.Name)];
+
+    private List<Store> Stores => [.. Store.Stores.Where(s => !s.IsDeleted).OrderBy(s => s.Name)];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Store.Changed += Refresh;
+        Ui.Changed += Refresh;
+        await Ui.LoadAsync();
+        Rebuild();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _self = DotNetObjectReference.Create(this);
+            await Js.InvokeVoidAsync("alloPullToRefresh.register", _scrollArea, _self);
+        }
+    }
+
+    [JSInvokable]
+    public Task OnPullToRefresh() => Sync.SyncNowAsync();
+
+    private void Refresh() => InvokeAsync(() =>
+    {
+        Rebuild();
+        StateHasChanged();
+    });
+
+    private void Rebuild()
+    {
+        Ui.FallBackIfMissing();
+        _groups = ListView.Build(Store, Ui.ListId, Ui.StoreId);
+        _checkedCount = _groups.Sum(g => g.Entries.Count(e => e.IsChecked));
+    }
+
+    private string ItemName(ListEntry entry) =>
+        Store.Items.FirstOrDefault(i => i.Id == entry.ItemId)?.Name ?? "Item";
+
+    private Task ToggleAsync(ListEntry entry, bool isChecked) => Actions.SetCheckedAsync(entry, isChecked, UserId);
+
+    private async Task EditAsync(ListEntry entry)
+    {
+        var parameters = new DialogParameters<EntryEditDialog>
+        {
+            { x => x.Entry, entry }, { x => x.UserId, UserId },
+        };
+        await Dialogs.ShowAsync<EntryEditDialog>(null, parameters, FullWidth);
+    }
+
+    private async Task PickCategoryAsync(ListEntry entry)
+    {
+        var parameters = new DialogParameters<CategoryPickerDialog>
+        {
+            { x => x.Title, ItemName(entry) }, { x => x.Selected, entry.CategoryId },
+        };
+        var result = await (await Dialogs.ShowAsync<CategoryPickerDialog>(null, parameters, FullWidth)).Result;
+        if (result is { Canceled: false, Data: Guid categoryId })
+        {
+            await Actions.SetCategoryAsync(entry, categoryId, UserId);
+        }
+    }
+
+    private async Task ClearCheckedAsync() => await Actions.ClearCheckedAsync(Ui.ListId, Ui.StoreId);
+
+    private static DialogOptions FullWidth => new()
+    {
+        FullWidth = true, MaxWidth = MaxWidth.ExtraSmall, CloseOnEscapeKey = true,
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        Store.Changed -= Refresh;
+        Ui.Changed -= Refresh;
+        _self?.Dispose();
+        await Task.CompletedTask;
+    }
+}

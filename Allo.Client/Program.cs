@@ -1,6 +1,8 @@
 using Allo.Client;
 using Allo.Client.Auth;
+using Allo.Client.Lists;
 using Allo.Client.Sync;
+using Allo.Shared.Lists;
 using Allo.Shared.Sync;
 using Blazored.LocalStorage;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -32,6 +34,8 @@ builder.Services.AddSingleton<ISyncStorage, BrowserSyncStorage>();
 builder.Services.AddSingleton<LocalStore>();
 builder.Services.AddSingleton<ISyncTransport, HttpSyncTransport>();
 builder.Services.AddSingleton<SyncEngine>();
+builder.Services.AddSingleton<ListActions>();
+builder.Services.AddSingleton<UiState>();
 builder.Services.AddScoped<SyncCoordinator>();
 
 var host = builder.Build();

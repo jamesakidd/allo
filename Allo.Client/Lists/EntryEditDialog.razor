@@ -1,0 +1,126 @@
+@using Allo.Shared.Lists
+@using Allo.Shared.Models
+@using Allo.Shared.Sync
+@inject LocalStore Store
+@inject ListActions Actions
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@ItemName</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <div class="quantity-row">
+                @if (_unit.IsCountUnit())
+                {
+                    @* Whole numbers only: steppers beat typing on a phone. *@
+                    <MudIconButton Icon="@Icons.Material.Filled.Remove" Variant="Variant.Outlined"
+                                   Size="Size.Large" OnClick="@(() => Bump(-1))" aria-label="Less" />
+                    <MudText Typo="Typo.h5" Class="quantity-value">@_quantity.ToString("0")</MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Add" Variant="Variant.Outlined"
+                                   Size="Size.Large" OnClick="@(() => Bump(1))" aria-label="More" />
+                }
+                else
+                {
+                    <MudNumericField T="decimal" @bind-Value="_quantity" Label="Quantity" Min="0.01m" Step="0.1m"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="false" />
+                }
+                <MudSelect T="Unit" @bind-Value="_unit" Label="Unit" Variant="Variant.Outlined"
+                           Margin="Margin.Dense" Class="unit-select">
+                    @foreach (var unit in Units.All)
+                    {
+                        <MudSelectItem T="Unit" Value="@unit">@unit.ToCode()</MudSelectItem>
+                    }
+                </MudSelect>
+            </div>
+
+            <MudSelect T="Guid" @bind-Value="_categoryId" Label="Category" Variant="Variant.Outlined" Margin="Margin.Dense">
+                @foreach (var category in Categories)
+                {
+                    <MudSelectItem T="Guid" Value="@category.Id">@category.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudSelect T="Guid?" @bind-Value="_storeId" Label="Store" Variant="Variant.Outlined" Margin="Margin.Dense"
+                       Clearable="true">
+                <MudSelectItem T="Guid?" Value="@((Guid?)null)">Any store</MudSelectItem>
+                @foreach (var store in Stores)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)store.Id)">@store.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField @bind-Value="_note" Label="Note" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          MaxLength="500" />
+
+            @if (_error is not null)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@_error</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="RemoveAsync">Remove</MudButton>
+        <MudSpacer />
+        <MudButton OnClick="@(() => Dialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public IMudDialogInstance Dialog { get; set; } = null!;
+    [Parameter, EditorRequired] public ListEntry Entry { get; set; } = null!;
+    [Parameter, EditorRequired] public Guid UserId { get; set; }
+
+    private decimal _quantity;
+    private Unit _unit;
+    private Guid _categoryId;
+    private Guid? _storeId;
+    private string? _note;
+    private string? _error;
+
+    private string ItemName => Store.Items.FirstOrDefault(i => i.Id == Entry.ItemId)?.Name ?? "Item";
+
+    private IEnumerable<Category> Categories => Store.Categories.Where(c => !c.IsDeleted)
+        .OrderBy(c => c.Id == Category.UncategorizedId).ThenBy(c => c.SortOrder);
+
+    private IEnumerable<Store> Stores => Store.Stores.Where(s => !s.IsDeleted).OrderBy(s => s.Name);
+
+    protected override void OnInitialized()
+    {
+        (_quantity, _unit, _categoryId, _storeId, _note) =
+            (Entry.Quantity, Entry.Unit, Entry.CategoryId, Entry.StoreId, Entry.Note);
+    }
+
+    private void Bump(int by) => _quantity = Math.Max(1, _quantity + by);
+
+    private async Task SaveAsync()
+    {
+        var note = string.IsNullOrWhiteSpace(_note) ? null : _note.Trim();
+        // Check a copy: the entry on screen shouldn't take invalid values even briefly.
+        var candidate = new ListEntry
+        {
+            Id = Entry.Id, ListId = Entry.ListId, ItemId = Entry.ItemId, CategoryId = _categoryId,
+            Quantity = _quantity, Unit = _unit, Note = note, StoreId = _storeId, Tags = Entry.Tags,
+        };
+        if (SyncValidation.Validate(candidate) is { } error)
+        {
+            _error = error;
+            return;
+        }
+
+        Entry.Quantity = _quantity;
+        Entry.Unit = _unit;
+        Entry.StoreId = _storeId;
+        Entry.Note = note;
+        await Actions.SetCategoryAsync(Entry, _categoryId, UserId);
+        await Store.SaveAsync(Entry);
+        Dialog.Close(DialogResult.Ok(true));
+    }
+
+    private async Task RemoveAsync()
+    {
+        await Store.DeleteAsync(Entry);
+        Dialog.Close(DialogResult.Ok(true));
+    }
+}

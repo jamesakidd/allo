@@ -1,0 +1,128 @@
+@page "/categories"
+@using Allo.Shared.Lists
+@using Allo.Shared.Models
+@using Allo.Shared.Sync
+@implements IDisposable
+@inject LocalStore Store
+@inject ListActions Actions
+@inject AlloAuthStateProvider Auth
+@inject IDialogService Dialogs
+
+<PageTitle>Categories · allo</PageTitle>
+
+<MudStack Spacing="4">
+    <MudText Typo="Typo.h5">Categories</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+        This is the default order the list is grouped in. Categories are shared by every store.
+    </MudText>
+
+    <MudPaper Elevation="0" Outlined="true">
+        @foreach (var category in Ordered)
+        {
+            var isUncategorized = category.Id == Category.UncategorizedId;
+            <div class="manage-row @(category.ParentId is null ? "" : "manage-row-child")">
+                <MudText Typo="Typo.body1">@category.Name</MudText>
+                <MudSpacer />
+                @if (!isUncategorized)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Medium"
+                                   OnClick="@(() => Actions.MoveCategoryAsync(category, true, UserId))"
+                                   aria-label="@($"Move {category.Name} up")" />
+                    <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Medium"
+                                   OnClick="@(() => Actions.MoveCategoryAsync(category, false, UserId))"
+                                   aria-label="@($"Move {category.Name} down")" />
+                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Medium"
+                             aria-label="@($"More for {category.Name}")">
+                        <MudMenuItem OnClick="@(() => RenameAsync(category))">Rename</MudMenuItem>
+                        <MudMenuItem OnClick="@(() => MoveUnderAsync(category))">Move under…</MudMenuItem>
+                        <MudMenuItem OnClick="@(() => MergeAsync(category))">Merge into…</MudMenuItem>
+                        <MudMenuItem OnClick="@(() => DeleteAsync(category))">Delete</MudMenuItem>
+                    </MudMenu>
+                }
+            </div>
+        }
+    </MudPaper>
+
+    <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.subtitle1">Add a category</MudText>
+            <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          MaxLength="100" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddAsync">Add</MudButton>
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private string _name = "";
+
+    private Guid UserId => Auth.User?.Id ?? Guid.Empty;
+
+    private IReadOnlyList<Category> Ordered => CategoryTree.Ordered(Store.Categories);
+
+    protected override void OnInitialized() => Store.Changed += Refresh;
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    private async Task AddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            return;
+        }
+        await Actions.CreateCategoryAsync(_name, null, UserId);
+        _name = "";
+    }
+
+    private async Task RenameAsync(Category category)
+    {
+        if (await Prompts.RenameAsync(Dialogs, "Rename category", category.Name) is { } name)
+        {
+            category.Name = name;
+            category.UpdatedBy = UserId;
+            await Store.SaveAsync(category);
+        }
+    }
+
+    private async Task MoveUnderAsync(Category category)
+    {
+        if (await PickAsync($"Move {category.Name} under", category.ParentId ?? Guid.Empty, category.Id) is { } parentId)
+        {
+            category.ParentId = parentId == category.Id ? null : parentId;
+            category.UpdatedBy = UserId;
+            await Store.SaveAsync(category);
+        }
+    }
+
+    private async Task MergeAsync(Category category)
+    {
+        if (await PickAsync($"Merge {category.Name} into", Guid.Empty, category.Id) is { } targetId
+            && Store.Categories.FirstOrDefault(c => c.Id == targetId) is { } target)
+        {
+            await Actions.MergeCategoriesAsync(category, target, UserId);
+        }
+    }
+
+    private async Task DeleteAsync(Category category)
+    {
+        var confirmed = await Dialogs.ShowMessageBoxAsync($"Delete {category.Name}?",
+            "Anything in it moves to Uncategorized.", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed == true)
+        {
+            await Actions.DeleteCategoryAsync(category, UserId);
+        }
+    }
+
+    private async Task<Guid?> PickAsync(string title, Guid selected, Guid exclude)
+    {
+        var parameters = new DialogParameters<CategoryPickerDialog>
+        {
+            { x => x.Title, title }, { x => x.Selected, selected }, { x => x.Exclude, exclude },
+        };
+        var dialog = await Dialogs.ShowAsync<CategoryPickerDialog>(null, parameters,
+            new DialogOptions { FullWidth = true, MaxWidth = MaxWidth.ExtraSmall });
+        return await dialog.Result is { Canceled: false, Data: Guid id } ? id : null;
+    }
+
+    public void Dispose() => Store.Changed -= Refresh;
+}

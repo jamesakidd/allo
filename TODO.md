@@ -169,22 +169,29 @@ No SignalR in v1. Refresh on app focus plus pull-to-refresh is enough.
 - [x] Pass 2 produces a **suggestion, not a silent assignment.** (Matcher returns `MatchKind.Suggested`, distinct from `Exact`; the one-tap UI lands with Add entry) Pre-fill it, let the user change it in one tap. This is the specific Flipp failure being fixed
 - [x] Learn from corrections: when a user categorizes a new item, write it to the catalog so the next occurrence is automatic. Same for units: if an item's unit keeps being changed away from its default, update `DefaultUnit` (`CatalogLearning.RecordAdd`: a category change applies immediately; a unit needs the same non-default choice twice in a row)
 - [x] Autocomplete on add, ranked by `LastUsedAt` and frequency, so staples surface first (`CatalogAutocomplete`: `UseCount` plus a recency boost that halves every 14 days, then name prefix > alias prefix > later word)
-- [ ] Category manager UI: add, rename, nest, reorder, merge two categories
+- [x] Category manager UI (`/categories`): add, rename, nest ("move under"), reorder (up/down among siblings), merge two categories. Deleting one moves its contents to Uncategorized, never leaving a dangling reference
 - [x] Do not attempt to seed hardware or home goods. Groceries repeat weekly, one-off items do not, and categorizing those by hand once is fine
 
 ## Lists & Entries
 
-- [ ] Add entry: type-ahead against catalog (`CatalogAutocomplete`), quantity, unit (pre-filled from the item's `DefaultUnit`), optional note
-- [ ] Add entry categorization UI on `CatalogMatcher`: exact match fills silently; a suggestion is pre-filled but visibly changeable in one tap; no match pre-focuses the category picker. On confirm, call `CatalogLearning.RecordAdd` and save the returned item with the entry
-- [ ] Quantity input switches by unit: +/- stepper for count units, decimal keypad for measure units
-- [ ] Validation, client and server: quantity > 0, whole numbers only for count units
-- [ ] Check off / uncheck, with checked items collapsing to the bottom of their category
-- [ ] Group by category, sorted by the active store's `StoreCategoryOrder`
-- [ ] Store selector at the top, re-sorting the same list into that store's walking order
-- [ ] Store view shows that store's entries plus anything with no store assigned
-- [ ] Clear checked items (soft delete, tombstoned)
-- [ ] Edit entry (quantity, unit, note, category, store, tags)
-- [ ] Second list support for watch-list style items
+Screen logic is in `Allo.Shared/Lists` (`ListView` groups and orders, `ListActions` performs
+every change) so it's testable without a browser; the Razor pages are a thin shell over it.
+
+- [x] Add entry: one line pinned above the keyboard. Type-ahead against the catalog (`CatalogAutocomplete`), enter adds with quantity 1 and the item's `DefaultUnit`, and focus stays in the box for the next item
+- [x] Add entry categorization UI on `CatalogMatcher`: exact match fills silently; a suggestion shows as a chip under the box ("check the category") that opens the picker in one tap; no match lands in Uncategorized the same way. `CatalogLearning.RecordAdd` runs on every add
+- [x] Adding something already on the list adds to that row instead of making a second one (same item, same unit, not checked)
+- [x] Quantity input switches by unit: +/- stepper for count units, decimal field for measure units
+- [x] Validation, client and server: quantity > 0, whole numbers only for count units (shared `SyncValidation`, checked on a copy so a rejected edit never lands on screen)
+- [x] Check off / uncheck, with checked items collapsing to the bottom of their category
+- [x] Group by category, sorted by the active store's `StoreCategoryOrder`, subcategories staying with their parent
+- [x] Store selector at the top, re-sorting the same list into that store's walking order (verified: after moving Bakery above Produce globally, a store keeps its own order)
+- [x] Store view shows that store's entries plus anything with no store assigned
+- [x] Clear checked items (soft delete, tombstoned)
+- [x] Edit entry (quantity, unit, note, category, store) — tags land with the Tags section
+- [x] Second list support for watch-list style items (`/lists`: add, rename, delete; a list selector appears once there's more than one)
+- [x] Stores screen (`/stores`): add (copies the default category order), rename, delete. Deleting a store leaves its entries on the list with no store
+- [ ] Reorder categories per store (drag or up/down on the store's own order). Until then every store starts from, and keeps, the default order
+- [x] Active list and store are remembered per device, not synced: two people in different stores don't move each other's view
 
 ## Tags
 
@@ -207,7 +214,7 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 - [x] `GET /api/sync?since={seq}` returning changed rows of every synced table including tombstones, plus the family list, read in one transaction so the cursor matches the rows
 - [x] `POST /api/sync` accepting a batch of client changes, LWW resolution server-side. Who comes from the login, never the payload. Each row saved on its own: an invalid row is rejected (with the server's current version returned) instead of failing the batch and stalling the queue forever
 - [x] Sync on app focus, on reconnect, on start/login, and about a second after local changes stop. Tapping the status indicator syncs now
-- [ ] Pull-to-refresh gesture on the list screen (lands with the list UI; calls `SyncCoordinator.SyncNowAsync`)
+- [x] Pull-to-refresh gesture on the list screen (drag down at the top; the page follows your finger and syncs past ~70px)
 - [x] Sync status indicator: last synced time and pending change count. Not a spinner. "3 changes pending" reads as working, an ambiguous spinner reads as broken (`SyncStatus` in the app bar: "Synced 2 min ago", "3 changes pending", "Offline")
 - [x] Duplicate catalog items: two devices can create "oat milk" offline with different ids (`Item.NormalizedName` is deliberately not unique). Sync must merge them: keep one, repoint entries, tombstone the other. (Built as: the server never inserts the second one; it repoints that push's entries and returns an `ItemRemap`, and the phone swaps the id locally)
 - [x] Test properly in airplane mode: add, check off, edit, delete, then reconnect (automated in `SyncEngineTests` with two simulated phones)
@@ -220,9 +227,9 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 - [ ] Web manifest, icons, splash, standalone display mode
 - [ ] Service worker caching the app shell, with a working update path (no stale-forever builds)
 - [ ] Trim and Brotli-compress the WASM payload, measure cold start on cell data
-- [ ] Touch targets sized for one-handed use in a store, checkbox hit area generous
+- [x] Touch targets sized for one-handed use in a store, checkbox hit area generous (48px rows, large checkboxes, add bar at the bottom within thumb reach)
+- [x] Keep the keyboard up when adding multiple items in a row
 - [x] Dark theme (the example app is dark and it is the right call for a store)
-- [ ] Keep the keyboard up when adding multiple items in a row
 - [ ] Verify home screen install on Android
 
 ## Auth
@@ -260,7 +267,7 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 
 - [ ] App icon and favicon
 - [ ] Docker logo for the Unraid dockers page
-- [ ] Empty state for a fresh list
+- [x] Empty state for a fresh list
 - [ ] Import: paste a block of text, one item per line, bulk-add with categorization suggestions
 
 ## Parked / Later
