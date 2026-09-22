@@ -182,7 +182,7 @@ every change) so it's testable without a browser; the Razor pages are a thin she
 - [x] Adding something already on the list adds to that row instead of making a second one (same item, same unit, not checked)
 - [x] Quantity input switches by unit: +/- stepper for count units, decimal field for measure units
 - [x] Validation, client and server: quantity > 0, whole numbers only for count units (shared `SyncValidation`, checked on a copy so a rejected edit never lands on screen)
-- [x] Check off / uncheck, with checked items collapsing to the bottom of their category
+- [x] Check off / uncheck: checked items move to an "In the cart" section below the live list, still grouped by category so they can be reviewed; unchecking puts them straight back
 - [x] Group by category, sorted by the active store's `StoreCategoryOrder`, subcategories staying with their parent
 - [x] Store selector at the top, re-sorting the same list into that store's walking order (verified: after moving Bakery above Produce globally, a store keeps its own order)
 - [x] Store view shows that store's entries plus anything with no store assigned (the store dropdown is a filter first: picking one hides other stores' items, "Any store" shows everything)

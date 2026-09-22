@@ -3,16 +3,22 @@ using Allo.Shared.Sync;
 
 namespace Allo.Shared.Lists;
 
-public sealed record EntryGroup(Category Category, IReadOnlyList<ListEntry> Entries)
+public sealed record EntryGroup(Category Category, IReadOnlyList<ListEntry> Entries);
+
+// What's still to buy, and below it what's already in the cart. Both keep their
+// categories, so a checked item stays recognisable while it's out of the way.
+public sealed record ListSections(IReadOnlyList<EntryGroup> ToBuy, IReadOnlyList<EntryGroup> Checked)
 {
-    public int UncheckedCount => Entries.Count(e => !e.IsChecked);
+    public int CheckedCount => Checked.Sum(g => g.Entries.Count);
+
+    public bool IsEmpty => ToBuy.Count == 0 && Checked.Count == 0;
 }
 
 // Turns the device's rows into what the list screen shows: entries grouped by category,
-// in the active store's walking order, checked ones at the bottom of their category.
+// in the active store's walking order.
 public static class ListView
 {
-    public static IReadOnlyList<EntryGroup> Build(LocalStore store, Guid listId, Guid? storeId)
+    public static ListSections Build(LocalStore store, Guid listId, Guid? storeId)
     {
         var categories = store.Categories.Where(c => !c.IsDeleted).ToDictionary(c => c.Id);
         var uncategorized = categories.GetValueOrDefault(Category.UncategorizedId)
@@ -23,11 +29,15 @@ public static class ListView
                 .ToDictionary(o => o.CategoryId, o => o.SortOrder)
             : [];
 
-        return Entries(store, listId, storeId)
+        var entries = Entries(store, listId, storeId).ToList();
+        return new ListSections(
+            Group(entries.Where(e => !e.IsChecked)),
+            Group(entries.Where(e => e.IsChecked)));
+
+        IReadOnlyList<EntryGroup> Group(IEnumerable<ListEntry> source) => source
             .GroupBy(e => categories.GetValueOrDefault(e.CategoryId) ?? uncategorized)
-            .Select(g => new EntryGroup(g.Key, [.. g
-                .OrderBy(e => e.IsChecked)
-                .ThenBy(e => names.GetValueOrDefault(e.ItemId, ""), StringComparer.OrdinalIgnoreCase)]))
+            .Select(g => new EntryGroup(g.Key,
+                [.. g.OrderBy(e => names.GetValueOrDefault(e.ItemId, ""), StringComparer.OrdinalIgnoreCase)]))
             .OrderBy(g => g.Category.Id == Category.UncategorizedId) // always last
             .ThenBy(g => SortKey(g.Category, categories, order), SortKeyComparer.Instance)
             .ToList();

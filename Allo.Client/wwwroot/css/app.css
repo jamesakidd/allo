@@ -280,3 +280,19 @@ h1:focus {
 .mud-popover-provider .mud-popover {
     z-index: 1500 !important;
 }
+
+/* "In the cart": below the live list, dimmed, with its own heading. Still grouped by
+   category so it can be checked over before the till. */
+.checked-section {
+    margin-top: 1.5rem;
+    padding-top: 0.5rem;
+    border-top: 2px solid rgba(255, 255, 255, 0.12);
+    opacity: 0.75;
+}
+
+.checked-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.25rem 0.25rem 0;
+}

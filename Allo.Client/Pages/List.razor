@@ -13,6 +13,27 @@
 
 <PageTitle>allo</PageTitle>
 
+@* Same markup for both sections. *@
+@{
+    RenderFragment<IReadOnlyList<EntryGroup>> RenderGroups = groups =>
+        @<text>
+            @foreach (var group in groups)
+            {
+                <div class="category-header">
+                    <MudText Typo="Typo.overline">@group.Category.Name</MudText>
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">@group.Entries.Count</MudText>
+                </div>
+                @foreach (var entry in group.Entries)
+                {
+                    <EntryRow @key="entry.Id" Entry="entry" Name="@ItemName(entry)"
+                              StoreName="@StoreOf(entry)?.Name" StoreColour="@StoreOf(entry)?.Color"
+                              OnToggle="@(checkedNow => ToggleAsync(entry, checkedNow))"
+                              OnEdit="@(() => EditAsync(entry))" />
+                }
+            }
+        </text>;
+}
+
 <div class="list-page" @ref="_scrollArea">
     <div class="list-selectors">
         @if (Lists.Count > 1)
@@ -37,7 +58,7 @@
         </MudSelect>
     </div>
 
-    @if (_groups.Count == 0)
+    @if (_sections.IsEmpty)
     {
         <MudStack Spacing="1" AlignItems="AlignItems.Center" Class="empty-state">
             <MudIcon Icon="@Icons.Material.Outlined.ShoppingCart" Size="Size.Large" Color="Color.Primary" />
@@ -47,27 +68,22 @@
     }
     else
     {
-        foreach (var group in _groups)
-        {
-            <div class="category-header">
-                <MudText Typo="Typo.overline">@group.Category.Name</MudText>
-                <MudText Typo="Typo.overline" Class="mud-text-secondary">@group.UncheckedCount</MudText>
-            </div>
-            foreach (var entry in group.Entries)
-            {
-                <EntryRow @key="entry.Id" Entry="entry" Name="@ItemName(entry)" StoreName="@StoreOf(entry)?.Name" StoreColour="@StoreOf(entry)?.Color"
-                          OnToggle="@(checkedNow => ToggleAsync(entry, checkedNow))"
-                          OnEdit="@(() => EditAsync(entry))" />
-            }
-        }
+        @RenderGroups(_sections.ToBuy)
 
-        @if (_checkedCount > 0)
+        @* In the cart: out of the way at the bottom, still grouped by category so it can
+           be checked over, and one tap puts anything back on the list above. *@
+        @if (_sections.CheckedCount > 0)
         {
-            <div class="clear-checked">
-                <MudButton Variant="Variant.Text" Color="Color.Default" Style="text-transform: none;"
-                           StartIcon="@Icons.Material.Filled.ClearAll" OnClick="ClearCheckedAsync">
-                    Clear @_checkedCount checked
-                </MudButton>
+            <div class="checked-section">
+                <div class="checked-header">
+                    <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">
+                        In the cart · @_sections.CheckedCount
+                    </MudText>
+                    <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Default"
+                               Style="text-transform: none;" StartIcon="@Icons.Material.Filled.ClearAll"
+                               OnClick="ClearCheckedAsync">Clear</MudButton>
+                </div>
+                @RenderGroups(_sections.Checked)
             </div>
         }
     }
@@ -78,8 +94,7 @@
 @code {
     private ElementReference _scrollArea;
     private DotNetObjectReference<List>? _self;
-    private IReadOnlyList<EntryGroup> _groups = [];
-    private int _checkedCount;
+    private ListSections _sections = new([], []);
 
     private Guid UserId => Auth.User?.Id ?? Guid.Empty;
 
@@ -116,8 +131,7 @@
     private void Rebuild()
     {
         Ui.FallBackIfMissing();
-        _groups = ListView.Build(Store, Ui.ListId, Ui.StoreId);
-        _checkedCount = _groups.Sum(g => g.Entries.Count(e => e.IsChecked));
+        _sections = ListView.Build(Store, Ui.ListId, Ui.StoreId);
     }
 
     private string ItemName(ListEntry entry) =>

@@ -55,8 +55,10 @@ public class ListTests
         return categories;
     }
 
-    private IReadOnlyList<EntryGroup> Groups(Guid? storeId = null) =>
+    private ListSections Sections(Guid? storeId = null) =>
         ListView.Build(_store, ShoppingList.DefaultId, storeId);
+
+    private IReadOnlyList<EntryGroup> Groups(Guid? storeId = null) => Sections(storeId).ToBuy;
 
     [Fact]
     public async Task Add_UsesTheCatalogCategoryAndUnit()
@@ -125,9 +127,7 @@ public class ListTests
         await _actions.AddAsync("bananas", ShoppingList.DefaultId, User);
         await _actions.AddAsync("bagels", ShoppingList.DefaultId, User);
 
-        var groups = Groups();
-
-        Assert.Equal(["Produce", "Bakery", "Dairy", "Uncategorized"], groups.Select(g => g.Category.Name));
+        Assert.Equal(["Produce", "Bakery", "Dairy", "Uncategorized"], Groups().Select(g => g.Category.Name));
     }
 
     [Fact]
@@ -160,17 +160,46 @@ public class ListTests
     }
 
     [Fact]
-    public async Task CheckedEntries_SinkToTheBottomOfTheirCategory()
+    public async Task CheckedEntries_MoveToTheirOwnSection_KeepingTheirCategory()
     {
         var milk = await _actions.AddAsync("milk", ShoppingList.DefaultId, User);
         await _actions.AddAsync("butter", ShoppingList.DefaultId, User);
-        await _actions.AddAsync("yogurt", ShoppingList.DefaultId, User);
+        await _actions.AddAsync("bananas", ShoppingList.DefaultId, User);
 
         await _actions.SetCheckedAsync(milk.Entry, true, User);
 
-        var dairy = Groups().Single(g => g.Category.Name == "Dairy");
-        Assert.Equal(milk.Entry.Id, dairy.Entries[^1].Id);
-        Assert.Equal(2, dairy.UncheckedCount);
+        var sections = Sections();
+        Assert.Equal(1, sections.CheckedCount);
+        Assert.DoesNotContain(sections.ToBuy.SelectMany(g => g.Entries), e => e.Id == milk.Entry.Id);
+        var checkedGroup = Assert.Single(sections.Checked);
+        Assert.Equal("Dairy", checkedGroup.Category.Name);
+        Assert.Equal(milk.Entry.Id, Assert.Single(checkedGroup.Entries).Id);
+        // Butter is still to buy, in the same Dairy group as before.
+        Assert.Single(sections.ToBuy.Single(g => g.Category.Name == "Dairy").Entries);
+    }
+
+    [Fact]
+    public async Task Unchecking_PutsItBackOnTheList()
+    {
+        var milk = await _actions.AddAsync("milk", ShoppingList.DefaultId, User);
+        await _actions.SetCheckedAsync(milk.Entry, true, User);
+
+        await _actions.SetCheckedAsync(milk.Entry, false, User);
+
+        var sections = Sections();
+        Assert.Empty(sections.Checked);
+        Assert.Equal(milk.Entry.Id, Assert.Single(sections.ToBuy.Single(g => g.Category.Name == "Dairy").Entries).Id);
+    }
+
+    [Fact]
+    public async Task CheckedSection_KeepsTheStoresCategoryOrder()
+    {
+        var milk = await _actions.AddAsync("milk", ShoppingList.DefaultId, User);
+        var bananas = await _actions.AddAsync("bananas", ShoppingList.DefaultId, User);
+        await _actions.SetCheckedAsync(milk.Entry, true, User);
+        await _actions.SetCheckedAsync(bananas.Entry, true, User);
+
+        Assert.Equal(["Produce", "Dairy"], Sections().Checked.Select(g => g.Category.Name));
     }
 
     [Fact]
@@ -239,6 +268,7 @@ public class ListTests
 
         Assert.Equal(Category.UncategorizedId, _store.Entries.Single(e => e.Id == brie.Entry.Id).CategoryId);
         Assert.Equal("Uncategorized", Assert.Single(Groups()).Category.Name);
+
     }
 
     [Fact]
