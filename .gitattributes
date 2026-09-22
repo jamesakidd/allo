@@ -1,0 +1,5 @@
+# These run on Linux regardless of where they are edited. A CRLF shell script fails on
+# the shebang with a confusing "\r: command not found", and a CRLF Dockerfile breaks
+# line continuations.
+*.sh text eol=lf
+Dockerfile text eol=lf
