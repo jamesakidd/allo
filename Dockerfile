@@ -4,6 +4,12 @@ WORKDIR /src
 
 # Relinks the WASM runtime on publish and strips the parts Allo never calls. Worth a few
 # minutes of build time: the first load happens on cell data in a store, once per device.
+# Emscripten drives that relink through emcc, which is a Python script, and the .NET SDK
+# image ships no Python — without this the publish fails with "unable to find python".
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3 /usr/bin/python
 RUN dotnet workload install wasm-tools
 
 # Restore first so dependency layers cache independently of source changes.
