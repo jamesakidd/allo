@@ -1,0 +1,135 @@
+@page "/account"
+@inject AlloAuthStateProvider Auth
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Account · Allo</PageTitle>
+
+<MudStack Spacing="4">
+    <MudText Typo="Typo.h5">Account</MudText>
+
+    @if (Auth.User?.MustChangePassword == true)
+    {
+        <MudAlert Severity="Severity.Info">You're using a temporary password. Choose a new one to continue.</MudAlert>
+    }
+    else
+    {
+        <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+            <EditForm Model="_name" OnValidSubmit="SaveDisplayNameAsync">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.subtitle1">Display name</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Shown to the family, like "checked off by @(Auth.User?.DisplayName)".
+                    </MudText>
+                    <MudTextField @bind-Value="_name.DisplayName" Label="Display name" Variant="Variant.Outlined"
+                                  Required="true" MaxLength="100" />
+                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                               Disabled="_busy">Save name</MudButton>
+                </MudStack>
+            </EditForm>
+        </MudPaper>
+    }
+
+    <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+        <EditForm Model="_password" OnValidSubmit="ChangePasswordAsync">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.subtitle1">Change password</MudText>
+                <MudTextField @bind-Value="_password.Current" Label="Current password" Variant="Variant.Outlined"
+                              InputType="InputType.Password" autocomplete="current-password" Required="true" />
+                <MudTextField @bind-Value="_password.New" Label="New password" Variant="Variant.Outlined"
+                              InputType="InputType.Password" autocomplete="new-password" Required="true"
+                              HelperText="@($"At least {PasswordRules.MinLength} characters")" />
+                <MudTextField @bind-Value="_password.Confirm" Label="Confirm new password" Variant="Variant.Outlined"
+                              InputType="InputType.Password" autocomplete="new-password" Required="true" />
+                @if (_passwordError is not null)
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">@_passwordError</MudAlert>
+                }
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                           Disabled="_busy">Change password</MudButton>
+            </MudStack>
+        </EditForm>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private readonly NameModel _name = new();
+    private readonly PasswordModel _password = new();
+    private string? _passwordError;
+    private bool _busy;
+
+    protected override void OnInitialized() => _name.DisplayName = Auth.User?.DisplayName ?? "";
+
+    private async Task SaveDisplayNameAsync()
+    {
+        _busy = true;
+        try
+        {
+            var response = await Http.PutAsJsonAsync("api/auth/display-name", new UpdateDisplayNameRequest(_name.DisplayName));
+            if (response.IsSuccessStatusCode)
+            {
+                await Auth.SetUserAsync(await response.Content.ReadFromJsonAsync<CurrentUser>());
+                Snackbar.Add("Name saved.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(await ApiErrors.ReadAsync(response), Severity.Error);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            Snackbar.Add("Can't reach the server. Try again when you have signal.", Severity.Warning);
+        }
+        _busy = false;
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        _passwordError = PasswordRules.Validate(_password.New)
+            ?? (_password.New != _password.Confirm ? "The new passwords don't match." : null);
+        if (_passwordError is not null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/auth/password",
+                new ChangePasswordRequest(_password.Current, _password.New));
+            if (response.IsSuccessStatusCode)
+            {
+                var wasTemporary = Auth.User?.MustChangePassword == true;
+                await Auth.SetUserAsync(Auth.User! with { MustChangePassword = false });
+                _password.Current = _password.New = _password.Confirm = "";
+                Snackbar.Add("Password changed.", Severity.Success);
+                if (wasTemporary)
+                {
+                    Navigation.NavigateTo("");
+                }
+            }
+            else
+            {
+                _passwordError = await ApiErrors.ReadAsync(response);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _passwordError = "Can't reach the server. Try again when you have signal.";
+        }
+        _busy = false;
+    }
+
+    private sealed class NameModel
+    {
+        public string DisplayName { get; set; } = "";
+    }
+
+    private sealed class PasswordModel
+    {
+        public string Current { get; set; } = "";
+        public string New { get; set; } = "";
+        public string Confirm { get; set; } = "";
+    }
+}

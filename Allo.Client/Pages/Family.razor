@@ -1,0 +1,110 @@
+@page "/family"
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>Family · Allo</PageTitle>
+
+<MudStack Spacing="4">
+    <MudText Typo="Typo.h5">Family</MudText>
+
+    @if (_members is null)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudPaper Elevation="0" Outlined="true">
+            <MudList T="FamilyMember" ReadOnly="true">
+                @foreach (var member in _members)
+                {
+                    <MudListItem Icon="@Icons.Material.Filled.Person" Text="@member.DisplayName"
+                                 SecondaryText="@member.Username" />
+                }
+            </MudList>
+        </MudPaper>
+    }
+
+    <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+        <EditForm Model="_new" OnValidSubmit="AddAsync">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.subtitle1">Add a family member</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Give them the temporary password. They'll pick their own the first time they log in.
+                </MudText>
+                <MudTextField @bind-Value="_new.DisplayName" Label="Name" Variant="Variant.Outlined" Required="true"
+                              MaxLength="100" />
+                <MudTextField @bind-Value="_new.Username" Label="Username" Variant="Variant.Outlined" Required="true"
+                              autocapitalize="none" MaxLength="@UsernameRules.MaxLength" />
+                <MudTextField @bind-Value="_new.TemporaryPassword" Label="Temporary password" Variant="Variant.Outlined"
+                              Required="true" autocomplete="off"
+                              HelperText="@($"At least {PasswordRules.MinLength} characters")" />
+                @if (_error is not null)
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">@_error</MudAlert>
+                }
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                           Disabled="_busy">Add</MudButton>
+            </MudStack>
+        </EditForm>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private List<FamilyMember>? _members;
+    private NewMemberModel _new = new();
+    private string? _error;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _members = await Http.GetFromJsonAsync<List<FamilyMember>>("api/users");
+        }
+        catch (HttpRequestException)
+        {
+            _members = [];
+            Snackbar.Add("Can't reach the server. The family list needs a connection.", Severity.Warning);
+        }
+    }
+
+    private async Task AddAsync()
+    {
+        _error = UsernameRules.Validate(_new.Username) ?? PasswordRules.Validate(_new.TemporaryPassword);
+        if (_error is not null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/users",
+                new AddFamilyMemberRequest(_new.Username, _new.DisplayName, _new.TemporaryPassword));
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"{_new.DisplayName.Trim()} can log in now.", Severity.Success);
+                _new = new NewMemberModel();
+                await LoadAsync();
+            }
+            else
+            {
+                _error = await ApiErrors.ReadAsync(response);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Can't reach the server. Try again when you have signal.";
+        }
+        _busy = false;
+    }
+
+    private sealed class NewMemberModel
+    {
+        public string DisplayName { get; set; } = "";
+        public string Username { get; set; } = "";
+        public string TemporaryPassword { get; set; } = "";
+    }
+}

@@ -6,6 +6,7 @@ namespace Allo.Api.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
+    public DbSet<UserLogin> UserLogins => Set<UserLogin>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Store> Stores => Set<Store>();
     public DbSet<StoreCategoryOrder> StoreCategoryOrders => Set<StoreCategoryOrder>();
@@ -24,6 +25,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<User>(e =>
         {
             e.Property(u => u.DisplayName).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<UserLogin>(e =>
+        {
+            e.HasKey(l => l.UserId);
+            e.HasOne<User>().WithOne().HasForeignKey<UserLogin>(l => l.UserId);
+            e.Property(l => l.Username).HasMaxLength(50);
+            e.HasIndex(l => l.Username).IsUnique();
         });
 
         modelBuilder.Entity<Category>(e =>

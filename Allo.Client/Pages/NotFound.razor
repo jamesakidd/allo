@@ -1,5 +1,10 @@
-﻿@page "/not-found"
+@page "/not-found"
+@attribute [AllowAnonymous]
 @layout MainLayout
 
-<h3>Not Found</h3>
-<p>Sorry, the content you are looking for does not exist.</p>
+<PageTitle>Not found · Allo</PageTitle>
+
+<MudStack Spacing="2" AlignItems="AlignItems.Center" Class="mt-8">
+    <MudText Typo="Typo.h6">Page not found</MudText>
+    <MudButton Href="" Variant="Variant.Text" Color="Color.Primary">Back to the list</MudButton>
+</MudStack>

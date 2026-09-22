@@ -1,6 +1,19 @@
-﻿<Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Pages.NotFound)">
-    <Found Context="routeData">
-        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)"/>
-        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
-    </Found>
-</Router>
+<MudThemeProvider Theme="@AlloTheme.Theme" IsDarkMode="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<CascadingAuthenticationState>
+    <Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+                <NotAuthorized>
+                    <RedirectToLogin />
+                </NotAuthorized>
+                <Authorizing>
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                </Authorizing>
+            </AuthorizeRouteView>
+        </Found>
+    </Router>
+</CascadingAuthenticationState>

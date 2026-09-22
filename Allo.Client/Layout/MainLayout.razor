@@ -1,16 +1,77 @@
-﻿@inherits LayoutComponentBase
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject AlloAuthStateProvider Auth
+@inject NavigationManager Navigation
 
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
-        </div>
-
-        <article class="content px-4">
+<MudLayout>
+    <AuthorizeView>
+        <Authorized>
+            <MudAppBar Elevation="0" Dense="true">
+                <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                               aria-label="Menu" OnClick="@(() => _drawerOpen = !_drawerOpen)" />
+                <MudText Typo="Typo.h6" Class="ml-2">Allo</MudText>
+            </MudAppBar>
+            <MudDrawer @bind-Open="_drawerOpen" Variant="DrawerVariant.Temporary" Elevation="1">
+                <MudDrawerHeader>
+                    <MudText Typo="Typo.subtitle1">@Auth.User?.DisplayName</MudText>
+                </MudDrawerHeader>
+                <MudNavMenu>
+                    <MudNavLink Href="" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Checklist">List</MudNavLink>
+                    <MudNavLink Href="family" Icon="@Icons.Material.Filled.People">Family</MudNavLink>
+                    <MudNavLink Href="account" Icon="@Icons.Material.Filled.Person">Account</MudNavLink>
+                    <MudNavLink OnClick="LogoutAsync" Icon="@Icons.Material.Filled.Logout">Log out</MudNavLink>
+                </MudNavMenu>
+            </MudDrawer>
+        </Authorized>
+    </AuthorizeView>
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.Small" Class="py-4">
             @Body
-        </article>
-    </main>
-</div>
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen;
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        Auth.AuthenticationStateChanged += OnAuthenticationStateChanged;
+    }
+
+    protected override void OnParametersSet() => EnforcePasswordChange();
+
+    // A temporary password has to be replaced before anything else.
+    private void EnforcePasswordChange()
+    {
+        if (Auth.User is { MustChangePassword: true } && Navigation.ToBaseRelativePath(Navigation.Uri) != "account")
+        {
+            Navigation.NavigateTo("account", replace: true);
+        }
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _drawerOpen = false;
+        EnforcePasswordChange();
+    }
+
+    private void OnAuthenticationStateChanged(Task<AuthenticationState> state) => InvokeAsync(() =>
+    {
+        EnforcePasswordChange();
+        StateHasChanged();
+    });
+
+    private async Task LogoutAsync()
+    {
+        await Auth.LogoutAsync();
+        Navigation.NavigateTo("login", replace: true);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        Auth.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+    }
+}

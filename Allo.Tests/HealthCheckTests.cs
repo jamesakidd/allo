@@ -1,49 +1,32 @@
 using System.Net;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Allo.Tests;
 
 public class HealthCheckTests : IDisposable
 {
-    private readonly string _dbDirectory =
-        Path.Combine(Path.GetTempPath(), "allo-tests-" + Guid.NewGuid().ToString("N"));
-    private readonly WebApplicationFactory<Program> _factory;
-
-    public HealthCheckTests()
-    {
-        var dbPath = Path.Combine(_dbDirectory, "allo.db");
-        _factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(b => b.UseSetting("ConnectionStrings:Default", $"Data Source={dbPath};Pooling=false"));
-    }
+    private readonly TestApp _app = new();
 
     [Fact]
-    public async Task Healthz_ReturnsHealthy_AfterAutoMigrate()
+    public async Task Healthz_ReturnsHealthy_AfterAutoMigrate_WithoutLogin()
     {
-        var client = _factory.CreateClient();
+        var client = _app.CreateClient();
 
         var response = await client.GetAsync("/healthz");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("Healthy", await response.Content.ReadAsStringAsync());
-        Assert.True(File.Exists(Path.Combine(_dbDirectory, "allo.db")));
+        Assert.True(File.Exists(_app.DatabasePath));
     }
 
     [Fact]
     public async Task UnknownApiRoute_Returns404_NotIndexHtml()
     {
-        var client = _factory.CreateClient();
+        var client = _app.CreateClient();
 
         var response = await client.GetAsync("/api/does-not-exist");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    public void Dispose()
-    {
-        _factory.Dispose();
-        if (Directory.Exists(_dbDirectory))
-        {
-            Directory.Delete(_dbDirectory, recursive: true);
-        }
-    }
+    public void Dispose() => _app.Dispose();
 }

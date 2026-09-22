@@ -1,0 +1,55 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@inject AlloAuthStateProvider Auth
+@inject NavigationManager Navigation
+
+<PageTitle>Log in · Allo</PageTitle>
+
+<MudStack Class="mt-8" Spacing="4">
+    <MudText Typo="Typo.h4" Align="Align.Center">Allo</MudText>
+    <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+        <EditForm Model="_model" OnValidSubmit="LoginAsync">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_model.Username" Label="Username" Variant="Variant.Outlined"
+                              autocomplete="username" autocapitalize="none" Required="true" AutoFocus="true" />
+                <MudTextField @bind-Value="_model.Password" Label="Password" Variant="Variant.Outlined"
+                              InputType="InputType.Password" autocomplete="current-password" Required="true" />
+                @if (_error is not null)
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">@_error</MudAlert>
+                }
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                           Size="Size.Large" FullWidth="true" Disabled="_busy">Log in</MudButton>
+            </MudStack>
+        </EditForm>
+    </MudPaper>
+</MudStack>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
+    private readonly LoginModel _model = new();
+    private string? _error;
+    private bool _busy;
+
+    private async Task LoginAsync()
+    {
+        _busy = true;
+        _error = await Auth.LoginAsync(_model.Username, _model.Password);
+        _busy = false;
+        if (_error is null)
+        {
+            // Only local paths, never an absolute URL from the query string.
+            var target = ReturnUrl is { Length: > 0 } url && !url.Contains("://") && !url.StartsWith("//")
+                && url != "login" ? url : "";
+            Navigation.NavigateTo(target, replace: true);
+        }
+    }
+
+    private sealed class LoginModel
+    {
+        public string Username { get; set; } = "";
+        public string Password { get; set; } = "";
+    }
+}

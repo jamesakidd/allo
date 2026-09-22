@@ -25,6 +25,8 @@ of the user seeing their own change.
   Not the .NET 8+ "Blazor Web App" auto render mode template.
 - **Backend:** ASP.NET Core minimal API.
 - **Database:** SQLite via EF Core. Single file in appdata, trivial backup.
+- **UI:** MudBlazor, dark theme, system fonts only (nothing downloaded, works offline).
+  Snackbars at the bottom so they don't cover the app bar.
 - **Local storage:** `Blazored.LocalStorage`. The dataset is small enough that IndexedDB
   is not worth the interop.
 - **Packaging:** one Docker image, API serves the published WASM files same-origin.
@@ -208,16 +210,26 @@ No SignalR in v1. Refresh on app focus plus pull-to-refresh is enough.
 - [ ] Service worker caching the app shell, with a working update path (no stale-forever builds)
 - [ ] Trim and Brotli-compress the WASM payload, measure cold start on cell data
 - [ ] Touch targets sized for one-handed use in a store, checkbox hit area generous
-- [ ] Dark theme (the example app is dark and it is the right call for a store)
+- [x] Dark theme (the example app is dark and it is the right call for a store)
 - [ ] Keep the keyboard up when adding multiple items in a row
 - [ ] Verify home screen install on Android
 
 ## Auth
 
-- [ ] Cookie auth, same pattern as EWD ERP: cookie middleware + standalone `PasswordHasher<TUser>`, simple `Users` table. Not full ASP.NET Core Identity, not an external provider
-- [ ] Long expiry with sliding renewal (nobody should be logged out mid-shop)
-- [ ] `[Authorize]` on all API endpoints as the real boundary; `AuthorizeView` gates the UI
-- [ ] Family-scale only: 4 or 5 accounts, no roles, no public sign-up. Accounts created manually or by a simple invite token
+- [x] Cookie auth, same pattern as EWD ERP: cookie middleware + standalone `PasswordHasher<TUser>`, simple `Users` table. Not full ASP.NET Core Identity, not an external provider
+  - Credentials live in a server-only `UserLogins` table (username, hash, `MustChangePassword`), apart from the shared `User` model, so a hash can never be serialized to a client
+  - The cookie is re-checked against `UserLogins` on every request, so a cookie for a missing account gets a clean 401
+  - Cookie encryption keys persist to `appdata/keys` (`DataProtection__KeysPath`), or every container update would log everyone out
+- [x] Long expiry with sliding renewal (nobody should be logged out mid-shop): 1 year sliding, persistent cookie
+- [x] `[Authorize]` on all API endpoints as the real boundary; `AuthorizeView` gates the UI (`/api` group requires auth; login/logout opt out. Client: `[Authorize]` on every page via `_Imports.razor`, login opts out)
+- [x] Family-scale only: 4 or 5 accounts, no roles, no public sign-up. Accounts created manually or by a simple invite token
+  - First account from `Admin__Username` / `Admin__InitialPassword` / `Admin__DisplayName` when none exist; after that any member adds others on the Family page with a temporary password
+  - Temporary and initial passwords must be changed at first login (the app routes to Account until they are). Minimum 8 characters
+  - Dev bootstrap in `appsettings.Development.json`: `dev` / `allo-dev-pass`
+- [x] Change own password, rename display name
+- [x] Login rate limiting: 5 attempts per minute per client address, 429 after that
+- [x] Client remembers the logged-in user on the device, so the app opens with no signal; only a real 401 logs out
+- [ ] Remove a family member (not built; would need a tombstone rather than a delete, since entries reference users)
 - [ ] Confirm the service worker and offline flow behave when the cookie has expired (do not silently discard queued changes)
 
 ## Deployment
@@ -228,6 +240,7 @@ No SignalR in v1. Refresh on app focus plus pull-to-refresh is enough.
 - [ ] SQLite file on a bind-mounted appdata volume
 - [ ] NPM reverse proxy on a No-IP subdomain with a valid Let's Encrypt cert (required for service worker and home screen install; do not rely on Tailscale, family members will not have the tailnet up in a store)
 - [ ] Backup: scheduled copy of the SQLite file, plus a manual copy before any container update
+- [ ] Forwarded headers for NPM: trust `X-Forwarded-For`/`-Proto` from the proxy only (`KnownProxies`). Without it the login rate limiter sees one address (the proxy) for everyone, and the cookie's `SameAsRequest` secure flag sees plain http
 - [ ] Security review for internet exposure, same considerations as EWD ERP
 
 ## Misc / Cosmetic

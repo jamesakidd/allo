@@ -1,11 +1,11 @@
 {
-  "name": "Allo.Client",
-  "short_name": "Allo.Client",
+  "name": "Allo",
+  "short_name": "Allo",
   "id": "./",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#03173d",
+  "background_color": "#121316",
+  "theme_color": "#1b1d21",
   "prefer_related_applications": false,
   "icons": [
     {
