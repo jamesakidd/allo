@@ -52,9 +52,12 @@ single cursor. Rows are never hard deleted (`SaveChanges` throws), and every FK 
 - `StoreCategoryOrder` (storeId, categoryId, sortOrder) — each store defines its own
   walking order over the shared categories. Keyed on (storeId, categoryId), not its own
   id, so two devices ordering the same store offline update one row, not create two
-- `Item` (id, name, defaultCategoryId, defaultUnit, aliases, defaultTags, notes, lastUsedAt)
-  — the reusable catalog, separate from list entries. `defaultUnit` pre-fills the entry's
-  unit ("ground beef" → `lb`, "bananas" → `bunch`), overridable per entry
+- `Item` (id, name, normalizedName, defaultCategoryId, defaultUnit, pendingUnit, aliases,
+  defaultTags, notes, lastUsedAt, useCount) — the reusable catalog, separate from list
+  entries. `defaultUnit` pre-fills the entry's unit ("ground beef" → `lb`, "bananas" →
+  `kg`), overridable per entry. `useCount` + `lastUsedAt` rank autocomplete; `pendingUnit`
+  holds a non-default unit until it's chosen twice in a row. Seeded items have name-based
+  (UUID v5) ids, so every install agrees on them
 - `ListEntry` (id, listId, itemId, categoryId, quantity, unit, note, storeId, tags,
   addedBy, updatedAt, updatedBy, isChecked, checkedAt, checkedBy, isDeleted, sequence)
   - `quantity` is `decimal`, `unit` is the `Unit` enum (see Conventions)
@@ -146,20 +149,26 @@ No SignalR in v1. Refresh on app focus plus pull-to-refresh is enough.
 
 ## Catalog & Categorization
 
-- [ ] Seed 400 to 600 common Canadian grocery items as JSON: name, category, default unit, aliases. Generic level only ("milk", "cheddar", "ground beef"), not brand level
-- [ ] Three-pass match on item entry:
+- [x] Seed 400 to 600 common Canadian grocery items as JSON: name, category, default unit, aliases. Generic level only ("milk", "cheddar", "ground beef"), not brand level
+  - 599 items in `Allo.Api/Data/Seed/catalog.json`, top-level categories only. Units: ground/bulk meat `lb`, deli meat and deli cheese `g`, eggs `dozen`, bananas `kg`, herbs and greens `bunch`, everything else `ea`
+  - Aliases are synonyms only ("pop" → soft drinks, "kd" → macaroni and cheese), never variants like "2% milk": an alias match shows the item's name, so variants would hide what was typed. Plurals are handled by the matcher, not aliases
+  - Seeded at startup, insert-missing only: an item that exists by id or name (deleted or not) is never touched, so edits and deletes stick while new seed items still reach existing installs
+- [x] Three-pass match on item entry (`CatalogMatcher` in `Allo.Shared`, runs offline on the client):
   1. exact match on normalized name or alias
   2. token containment ("sourdough bread" contains "bread" so suggest Bakery)
   3. no match, default to Uncategorized with the category picker pre-focused
-- [ ] Pass 2 produces a **suggestion, not a silent assignment.** Pre-fill it, let the user change it in one tap. This is the specific Flipp failure being fixed
-- [ ] Learn from corrections: when a user categorizes a new item, write it to the catalog so the next occurrence is automatic. Same for units: if an item's unit keeps being changed away from its default, update `DefaultUnit`
-- [ ] Autocomplete on add, ranked by `LastUsedAt` and frequency, so staples surface first
+  - Singular/plural forms match both ways ("grape" ↔ "grapes", "berry" ↔ "berries")
+  - Pass 2 prefers a phrase ending on the last word (the head noun): "bread flour" → Pantry, "peanut butter cookies" → Snacks
+- [x] Pass 2 produces a **suggestion, not a silent assignment.** (Matcher returns `MatchKind.Suggested`, distinct from `Exact`; the one-tap UI lands with Add entry) Pre-fill it, let the user change it in one tap. This is the specific Flipp failure being fixed
+- [x] Learn from corrections: when a user categorizes a new item, write it to the catalog so the next occurrence is automatic. Same for units: if an item's unit keeps being changed away from its default, update `DefaultUnit` (`CatalogLearning.RecordAdd`: a category change applies immediately; a unit needs the same non-default choice twice in a row)
+- [x] Autocomplete on add, ranked by `LastUsedAt` and frequency, so staples surface first (`CatalogAutocomplete`: `UseCount` plus a recency boost that halves every 14 days, then name prefix > alias prefix > later word)
 - [ ] Category manager UI: add, rename, nest, reorder, merge two categories
-- [ ] Do not attempt to seed hardware or home goods. Groceries repeat weekly, one-off items do not, and categorizing those by hand once is fine
+- [x] Do not attempt to seed hardware or home goods. Groceries repeat weekly, one-off items do not, and categorizing those by hand once is fine
 
 ## Lists & Entries
 
-- [ ] Add entry: type-ahead against catalog, quantity, unit (pre-filled from the item's `DefaultUnit`), optional note
+- [ ] Add entry: type-ahead against catalog (`CatalogAutocomplete`), quantity, unit (pre-filled from the item's `DefaultUnit`), optional note
+- [ ] Add entry categorization UI on `CatalogMatcher`: exact match fills silently; a suggestion is pre-filled but visibly changeable in one tap; no match pre-focuses the category picker. On confirm, call `CatalogLearning.RecordAdd` and save the returned item with the entry
 - [ ] Quantity input switches by unit: +/- stepper for count units, decimal keypad for measure units
 - [ ] Validation, client and server: quantity > 0, whole numbers only for count units
 - [ ] Check off / uncheck, with checked items collapsing to the bottom of their category

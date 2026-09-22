@@ -12,4 +12,11 @@ public class Item : SyncEntity
     public List<string> DefaultTags { get; set; } = [];
     public string? Notes { get; set; }
     public DateTimeOffset? LastUsedAt { get; set; }
+
+    // Times added to a list; with LastUsedAt, ranks autocomplete so staples surface first.
+    public int UseCount { get; set; }
+
+    // A non-default unit chosen on the last add. Chosen again on the next add, it becomes
+    // DefaultUnit, so one odd purchase doesn't flip the default.
+    public Unit? PendingUnit { get; set; }
 }

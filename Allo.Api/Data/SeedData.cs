@@ -26,6 +26,9 @@ public static class SeedData
         (new("00000000-0000-0000-0000-00000000c00c"), "Pet"),
     ];
 
+    public static IReadOnlyDictionary<string, Guid> CategoryIdsByName { get; } = TopLevelCategories
+        .ToDictionary(c => c.Name, c => c.Id, StringComparer.OrdinalIgnoreCase);
+
     public static void Apply(ModelBuilder modelBuilder)
     {
         var categories = TopLevelCategories
