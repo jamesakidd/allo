@@ -79,7 +79,7 @@
             { x => x.Name, name }, { x => x.Colour, colour },
         };
         var dialog = await Dialogs.ShowAsync<StoreDialog>(title, parameters,
-            new DialogOptions { FullWidth = true, MaxWidth = MaxWidth.ExtraSmall });
+            new DialogOptions { FullWidth = true, MaxWidth = MaxWidth.ExtraSmall, BackdropClick = false });
         return await dialog.Result is { Canceled: false, Data: Store details } ? details : null;
     }
 

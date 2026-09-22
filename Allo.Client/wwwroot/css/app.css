@@ -249,3 +249,34 @@ h1:focus {
     align-items: center;
     gap: 0.5rem;
 }
+
+.colour-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+    .colour-row > .mud-input-control {
+        flex: 1;
+    }
+
+.colour-swatch {
+    display: block;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 0.25rem;
+}
+
+/* The colour popup sized itself to the spectrum and scrolled its Done button out of
+   sight on a phone. Let it grow to fit, up to most of the screen. */
+.mud-picker-paper {
+    height: auto;
+    max-height: 90vh;
+}
+
+/* Popovers (the colour picker, selects) open from inside dialogs, which sit at 1402-1403.
+   Without this they render under the dialog that opened them. !important because the
+   z-index comes from an inline style. */
+.mud-popover-provider .mud-popover {
+    z-index: 1500 !important;
+}

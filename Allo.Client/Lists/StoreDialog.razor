@@ -6,9 +6,26 @@
         <MudStack Spacing="3">
             <MudTextField @bind-Value="Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense"
                           MaxLength="100" AutoFocus="true" />
-            <MudColorPicker @bind-Text="Colour" Label="Colour" Variant="Variant.Outlined" Margin="Margin.Dense"
-                            ColorPickerView="ColorPickerView.Spectrum" ShowAlpha="false"
-                            ShowModeSwitch="false" PickerVariant="PickerVariant.Dialog" Editable="true" />
+            @* Done closes the colour popup. Tapping outside it used to mean aiming at a
+               sliver of the dialog behind, and a miss closed the store dialog too. The
+               swatch opens it; the field takes a typed hex. Inline (a popover at the page
+               root), not Dialog: a dialog-variant picker renders inside this dialog's
+               content box and gets clipped by it. *@
+            <div class="colour-row">
+            <MudColorPicker @ref="_picker" @bind-Text="Colour" Label="Colour" Variant="Variant.Outlined"
+                            Margin="Margin.Dense" ColorPickerView="ColorPickerView.Spectrum" ShowAlpha="false"
+                            ShowModeSwitch="false" PickerVariant="PickerVariant.Inline" Editable="true"
+                            ShowInputs="false">
+                <PickerActions Context="picker">
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" FullWidth="true"
+                               OnClick="@(() => picker.CloseAsync())">Done</MudButton>
+                </PickerActions>
+            </MudColorPicker>
+                <MudButton Variant="Variant.Outlined" Size="Size.Medium" aria-label="Choose a colour"
+                           OnClick="@(() => _picker?.OpenAsync() ?? Task.CompletedTask)">
+                    <span class="colour-swatch" style="@SwatchStyle"></span>
+                </MudButton>
+            </div>
             @* The list is dark, so show the pill as it will actually look. *@
             <div class="colour-preview">
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">Shows on list rows as</MudText>
@@ -31,7 +48,11 @@
     [Parameter] public string Name { get; set; } = "";
     [Parameter] public string? Colour { get; set; }
 
+    private MudColorPicker? _picker;
     private string? _error;
+
+    private string SwatchStyle =>
+        $"background: {Normalized(Colour) ?? "var(--mud-palette-primary)"};";
 
     private string PreviewStyle
     {
