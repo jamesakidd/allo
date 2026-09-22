@@ -38,10 +38,12 @@ of the user seeing their own change.
 - `Category` (id, name, parentId nullable) — adjacency list, global, not per-store
 - `StoreCategoryOrder` (storeId, categoryId, sortOrder) — each store defines its own
   walking order over the shared categories
-- `Item` (id, name, defaultCategoryId, aliases, defaultTags, notes, lastUsedAt) — the
-  reusable catalog, separate from list entries
+- `Item` (id, name, defaultCategoryId, defaultUnit, aliases, defaultTags, notes, lastUsedAt)
+  — the reusable catalog, separate from list entries. `defaultUnit` pre-fills the entry's
+  unit ("ground beef" → `lb`, "bananas" → `bunch`), overridable per entry
 - `ListEntry` (id, listId, itemId, categoryId, quantity, unit, note, storeId, tags,
   addedBy, updatedAt, updatedBy, isChecked, checkedAt, checkedBy, isDeleted, sequence)
+  - `quantity` is `decimal`, `unit` is the `Unit` enum (see Conventions)
   - `sequence` is server-assigned on every accepted change, never set by the client
   - content group (quantity, unit, note, categoryId, storeId, tags) is covered by
     `updatedAt`/`updatedBy`; checked group (`isChecked`) by `checkedAt`/`checkedBy`
@@ -94,10 +96,17 @@ No SignalR in v1. Refresh on app focus plus pull-to-refresh is enough.
 - Client-generated GUIDs for all ids, so offline creates work without a round trip
 - Normalize item and tag names to lowercase for matching, display original casing
 - "Uncategorized" is a real category that always sorts last, never a null
-- Units are free text: a nullable string, trimmed and stored lowercase. The UI suggests
-  `ea`, `g`, `kg`, `lb`, `pkg`, `bunch`, `dozen` but accepts anything ("bag", "tray").
-  Not an enum: adding a unit would need a code change and a migration, and an older
-  offline client could receive a value it doesn't know
+- **Quantity** is a `decimal`, required, defaults to 1, must be > 0 (server rejects otherwise)
+- **Unit** is a C# enum in `Allo.Shared`, never null, defaults to `ea`:
+  - Count units (whole numbers only, +/- stepper in the UI): `ea`, `bunch`, `dozen`.
+    `ea` covers cans, packages, bags, etc.
+  - Measure units (decimals allowed, decimal keypad in the UI): `g`, `kg`, `lb`, `ml`, `l`, `gal`
+  - Stored as the string code in the DB and in JSON, never the integer, so the data stays
+    readable and adding a member never renumbers existing ones. Add new members at the end
+  - `ea` is hidden on display ("2 milk"); other units show ("1.5 kg ground beef")
+  - No conversion between units; 500 g and 1 lb stay as entered
+  - Tradeoff accepted: an older client can't parse a newly added unit. The service worker
+    update path (PWA section) is what keeps clients current
 
 ---
 
@@ -107,33 +116,36 @@ No SignalR in v1. Refresh on app focus plus pull-to-refresh is enough.
 - [x] EF Core + SQLite, initial migration, auto-migrate on startup
 - [x] Health check endpoint (`/healthz`, includes a DB check)
 - [x] Local dev run: API serving the WASM output same-origin, so dev matches prod
-- [x] Decide and document unit handling: free text with suggestions (see Conventions)
+- [x] Decide and document unit handling: `Unit` enum stored as string codes, `decimal` quantity (see Conventions)
 
 ## Data Model
 
 - [ ] `Category` with self-referencing `ParentId`, seeded top-level set (Produce, Bakery, Dairy, Meat & Seafood, Frozen, Pantry, Beverages, Snacks, Household, Personal Care, Baby, Pet, Uncategorized)
 - [ ] `Store` + `StoreCategoryOrder`, with a sensible default order applied to any new store
-- [ ] `Item` catalog table with `Aliases` and `DefaultTags` as JSON columns
+- [ ] `Unit` enum in `Allo.Shared` (`ea`, `g`, `kg`, `lb`, `ml`, `l`, `gal`, `bunch`, `dozen`), with an `IsCountUnit` helper; EF `HasConversion<string>()` and `JsonStringEnumConverter` so it's never stored or sent as an int
+- [ ] `Item` catalog table with `DefaultUnit`, and `Aliases` and `DefaultTags` as JSON columns
 - [ ] `ShoppingList` + `ListEntry`, with `CategoryId`, `AddedBy`, `UpdatedAt`, `UpdatedBy`, `IsChecked`, `CheckedAt`, `CheckedBy`, `IsDeleted`, `Sequence`
 - [ ] Sequence counter (change-log table or single counter row) that stamps `ListEntry.Sequence` on every accepted change
 - [ ] Index on `ListEntry.Sequence` (every sync pull filters on it)
 
 ## Catalog & Categorization
 
-- [ ] Seed 400 to 600 common Canadian grocery items as JSON: name, category, aliases. Generic level only ("milk", "cheddar", "ground beef"), not brand level
+- [ ] Seed 400 to 600 common Canadian grocery items as JSON: name, category, default unit, aliases. Generic level only ("milk", "cheddar", "ground beef"), not brand level
 - [ ] Three-pass match on item entry:
   1. exact match on normalized name or alias
   2. token containment ("sourdough bread" contains "bread" so suggest Bakery)
   3. no match, default to Uncategorized with the category picker pre-focused
 - [ ] Pass 2 produces a **suggestion, not a silent assignment.** Pre-fill it, let the user change it in one tap. This is the specific Flipp failure being fixed
-- [ ] Learn from corrections: when a user categorizes a new item, write it to the catalog so the next occurrence is automatic
+- [ ] Learn from corrections: when a user categorizes a new item, write it to the catalog so the next occurrence is automatic. Same for units: if an item's unit keeps being changed away from its default, update `DefaultUnit`
 - [ ] Autocomplete on add, ranked by `LastUsedAt` and frequency, so staples surface first
 - [ ] Category manager UI: add, rename, nest, reorder, merge two categories
 - [ ] Do not attempt to seed hardware or home goods. Groceries repeat weekly, one-off items do not, and categorizing those by hand once is fine
 
 ## Lists & Entries
 
-- [ ] Add entry: type-ahead against catalog, quantity, unit, optional note
+- [ ] Add entry: type-ahead against catalog, quantity, unit (pre-filled from the item's `DefaultUnit`), optional note
+- [ ] Quantity input switches by unit: +/- stepper for count units, decimal keypad for measure units
+- [ ] Validation, client and server: quantity > 0, whole numbers only for count units
 - [ ] Check off / uncheck, with checked items collapsing to the bottom of their category
 - [ ] Group by category, sorted by the active store's `StoreCategoryOrder`
 - [ ] Store selector at the top, re-sorting the same list into that store's walking order
