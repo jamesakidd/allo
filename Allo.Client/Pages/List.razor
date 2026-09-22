@@ -30,7 +30,9 @@
             <MudSelectItem T="Guid?" Value="@((Guid?)null)">Any store</MudSelectItem>
             @foreach (var store in Stores)
             {
-                <MudSelectItem T="Guid?" Value="@((Guid?)store.Id)">@store.Name</MudSelectItem>
+                <MudSelectItem T="Guid?" Value="@((Guid?)store.Id)">
+                    <span class="store-dot" style="@DotStyle(store)"></span>@store.Name
+                </MudSelectItem>
             }
         </MudSelect>
     </div>
@@ -53,7 +55,7 @@
             </div>
             foreach (var entry in group.Entries)
             {
-                <EntryRow @key="entry.Id" Entry="entry" Name="@ItemName(entry)" StoreName="@StoreName(entry)"
+                <EntryRow @key="entry.Id" Entry="entry" Name="@ItemName(entry)" StoreName="@StoreOf(entry)?.Name" StoreColour="@StoreOf(entry)?.Color"
                           OnToggle="@(checkedNow => ToggleAsync(entry, checkedNow))"
                           OnEdit="@(() => EditAsync(entry))" />
             }
@@ -121,8 +123,8 @@
     private string ItemName(ListEntry entry) =>
         Store.Items.FirstOrDefault(i => i.Id == entry.ItemId)?.Name ?? "Item";
 
-    private string? StoreName(ListEntry entry) => entry.StoreId is { } id
-        ? Store.Stores.FirstOrDefault(s => s.Id == id)?.Name
+    private Store? StoreOf(ListEntry entry) => entry.StoreId is { } id
+        ? Store.Stores.FirstOrDefault(s => s.Id == id)
         : null;
 
     private Task ToggleAsync(ListEntry entry, bool isChecked) => Actions.SetCheckedAsync(entry, isChecked, UserId);
@@ -150,6 +152,9 @@
     }
 
     private async Task ClearCheckedAsync() => await Actions.ClearCheckedAsync(Ui.ListId, Ui.StoreId);
+
+    private static string DotStyle(Store store) =>
+        $"background: {(store.Color is { Length: 7 } ? store.Color : "var(--mud-palette-primary)")};";
 
     private static DialogOptions FullWidth => new()
     {

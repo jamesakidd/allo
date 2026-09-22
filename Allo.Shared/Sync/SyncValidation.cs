@@ -14,7 +14,8 @@ public static class SyncValidation
 
     public static string? Validate(Category category) => Name(category.Name, NameMaxLength);
 
-    public static string? Validate(Store store) => Name(store.Name, NameMaxLength);
+    public static string? Validate(Store store) =>
+        Name(store.Name, NameMaxLength) ?? Colour(store.Color);
 
     public static string? Validate(ShoppingList list) => Name(list.Name, NameMaxLength);
 
@@ -45,6 +46,13 @@ public static class SyncValidation
             ? $"Tags must be 1 to {TagMaxLength} characters."
             : null;
     }
+
+    // Only a plain "#rrggbb": the value goes straight into a style attribute.
+    private static string? Colour(string? colour) =>
+        colour is null || (colour.Length == 7 && colour[0] == '#'
+            && colour[1..].All(Uri.IsHexDigit))
+            ? null
+            : "Colour must look like #66bb6a.";
 
     private static string? Name(string? name, int maxLength) =>
         string.IsNullOrWhiteSpace(name) ? "Name is required."

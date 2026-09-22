@@ -16,8 +16,7 @@
                everywhere anyway, and that's most of a list. *@
             @if (StoreName is { Length: > 0 })
             {
-                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
-                         Class="ma-0 store-pill">@StoreName</MudChip>
+                <span class="store-pill" style="@StoreStyle">@StoreName</span>
             }
         </div>
         @if (!string.IsNullOrWhiteSpace(Entry.Note))
@@ -31,8 +30,13 @@
     [Parameter, EditorRequired] public ListEntry Entry { get; set; } = null!;
     [Parameter, EditorRequired] public string Name { get; set; } = "";
     [Parameter] public string? StoreName { get; set; }
+    [Parameter] public string? StoreColour { get; set; }
     [Parameter] public EventCallback<bool> OnToggle { get; set; }
     [Parameter] public EventCallback OnEdit { get; set; }
+
+    private string? StoreStyle => StoreColour is { Length: 7 }
+        ? $"color: {StoreColour}; border-color: {StoreColour};"
+        : null;
 
     // "2", "1.5 kg": a quantity of one each is just the item name.
     private string? Quantity => Entry.Quantity == 1 && Entry.Unit == Unit.Each

@@ -33,7 +33,11 @@ public sealed class SyncApplier(AppDbContext db, Guid userId)
                 });
             await ApplyRowsAsync(SyncTable.Store, request.Rows.Stores, s => s.Id.ToString(),
                 s => db.Stores.FindAsync(s.Id), s => Task.FromResult(SyncValidation.Validate(s)),
-                (to, from) => to.Name = from.Name.Trim());
+                (to, from) =>
+                {
+                    to.Name = from.Name.Trim();
+                    to.Color = from.Color;
+                });
             await ApplyRowsAsync(SyncTable.ShoppingList, request.Rows.Lists, l => l.Id.ToString(),
                 l => db.ShoppingLists.FindAsync(l.Id), l => Task.FromResult(SyncValidation.Validate(l)),
                 (to, from) => to.Name = from.Name.Trim());

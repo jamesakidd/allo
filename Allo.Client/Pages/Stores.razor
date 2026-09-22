@@ -24,29 +24,22 @@
         @foreach (var store in AllStores)
         {
             <div class="manage-row">
+                <span class="store-dot" style="@DotStyle(store)"></span>
                 <MudText Typo="Typo.body1">@store.Name</MudText>
                 <MudSpacer />
                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Medium"
-                               OnClick="@(() => RenameAsync(store))" aria-label="@($"Rename {store.Name}")" />
+                               OnClick="@(() => RenameAsync(store))" aria-label="@($"Edit {store.Name}")" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Medium"
                                OnClick="@(() => DeleteAsync(store))" aria-label="@($"Delete {store.Name}")" />
             </div>
         }
     </MudPaper>
 
-    <MudPaper Class="pa-4" Elevation="0" Outlined="true">
-        <MudStack Spacing="3">
-            <MudText Typo="Typo.subtitle1">Add a store</MudText>
-            <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense"
-                          MaxLength="100" OnKeyDown="@(e => { if (e.Key == "Enter") return AddAsync(); return Task.CompletedTask; })" />
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddAsync">Add</MudButton>
-        </MudStack>
-    </MudPaper>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               OnClick="AddAsync">Add a store</MudButton>
 </MudStack>
 
 @code {
-    private string _name = "";
-
     private Guid UserId => Auth.User?.Id ?? Guid.Empty;
 
     private List<Store> AllStores => [.. Store.Stores.Where(s => !s.IsDeleted).OrderBy(s => s.Name)];
@@ -55,24 +48,39 @@
 
     private void Refresh() => InvokeAsync(StateHasChanged);
 
+    private static string DotStyle(Store store) =>
+        $"background: {(store.Color is { Length: 7 } ? store.Color : "var(--mud-palette-primary)")};";
+
     private async Task AddAsync()
     {
-        if (string.IsNullOrWhiteSpace(_name))
+        if (await ShowDialogAsync("Add a store", "", null) is { } details)
         {
-            return;
+            var created = await Actions.CreateStoreAsync(details.Name, UserId);
+            created.Color = details.Color;
+            await Store.SaveAsync(created);
         }
-        await Actions.CreateStoreAsync(_name, UserId);
-        _name = "";
     }
 
     private async Task RenameAsync(Store store)
     {
-        if (await Prompts.RenameAsync(Dialogs, "Rename store", store.Name) is { } name)
+        if (await ShowDialogAsync("Edit store", store.Name, store.Color) is { } details)
         {
-            store.Name = name;
+            store.Name = details.Name;
+            store.Color = details.Color;
             store.UpdatedBy = UserId;
             await Store.SaveAsync(store);
         }
+    }
+
+    private async Task<Store?> ShowDialogAsync(string title, string name, string? colour)
+    {
+        var parameters = new DialogParameters<StoreDialog>
+        {
+            { x => x.Name, name }, { x => x.Colour, colour },
+        };
+        var dialog = await Dialogs.ShowAsync<StoreDialog>(title, parameters,
+            new DialogOptions { FullWidth = true, MaxWidth = MaxWidth.ExtraSmall });
+        return await dialog.Result is { Canceled: false, Data: Store details } ? details : null;
     }
 
     private async Task DeleteAsync(Store store)

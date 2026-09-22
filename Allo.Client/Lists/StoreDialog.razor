@@ -1,0 +1,65 @@
+@using Allo.Shared.Models
+@using Allo.Shared.Sync
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          MaxLength="100" AutoFocus="true" />
+            <MudColorPicker @bind-Text="Colour" Label="Colour" Variant="Variant.Outlined" Margin="Margin.Dense"
+                            ColorPickerView="ColorPickerView.Spectrum" ShowAlpha="false"
+                            ShowModeSwitch="false" PickerVariant="PickerVariant.Dialog" Editable="true"
+                            Adornment="Adornment.Start" AdornmentColor="Color.Primary" />
+            @* The list is dark, so show the pill as it will actually look. *@
+            <div class="colour-preview">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Shows on list rows as</MudText>
+                <span class="store-pill-preview" style="@PreviewStyle">@(Name is { Length: > 0 } ? Name : "Store")</span>
+            </div>
+            @if (_error is not null)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@_error</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => Dialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public IMudDialogInstance Dialog { get; set; } = null!;
+    [Parameter] public string Name { get; set; } = "";
+    [Parameter] public string? Colour { get; set; }
+
+    private string? _error;
+
+    private string PreviewStyle
+    {
+        get
+        {
+            var colour = Normalized(Colour);
+            return colour is null ? "" : $"color: {colour}; border-color: {colour};";
+        }
+    }
+
+    private void Save()
+    {
+        if (string.IsNullOrWhiteSpace(Name))
+        {
+            _error = "Name is required.";
+            return;
+        }
+        var store = new Store { Name = Name.Trim(), Color = Normalized(Colour) };
+        if (SyncValidation.Validate(store) is { } error)
+        {
+            _error = error;
+            return;
+        }
+        Dialog.Close(DialogResult.Ok(store));
+    }
+
+    // The picker hands back #rrggbbaa; the pill only wants #rrggbb.
+    private static string? Normalized(string? colour) =>
+        colour is { Length: >= 7 } && colour[0] == '#' ? colour[..7] : null;
+}

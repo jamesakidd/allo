@@ -44,6 +44,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<Store>(e =>
         {
             e.Property(s => s.Name).HasMaxLength(100);
+            e.Property(s => s.Color).HasMaxLength(7);
         });
 
         modelBuilder.Entity<StoreCategoryOrder>(e =>
