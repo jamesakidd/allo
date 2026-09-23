@@ -285,6 +285,7 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
   - Stops the container for the copy. SQLite is a file, not a server: a copy taken mid-write can be torn, and the tear is silent until restore time. A few seconds of downtime for a shopping list is the cheap side of that trade, and it needs no `sqlite3` on the host or in the image
 - [x] Forwarded headers for NPM: trust `X-Forwarded-For`/`-Proto` from the proxy only (`KnownProxies`). Without it the login rate limiter sees one address (the proxy) for everyone, and the cookie's `SameAsRequest` secure flag sees plain http
   - Set `ForwardedHeaders__KnownProxies__0` to NPM's address. An empty list leaves the middleware out of the pipeline entirely, which is what a direct LAN run wants
+  - **A container passes a variable the user left blank as an empty string, not as absent.** `IPAddress.Parse("")` threw and the container would not start at all (first real deploy, 2026-09-22). Every setting read from config must treat blank as unset; `ContainerConfigTests` starts the app with the whole template blank
   - The framework's default trusted networks are cleared: honouring `X-Forwarded-For` from anyone would let a caller claim any address and walk around the login rate limit. `ForwardedHeaderTests` pins this
 - [x] Security review for internet exposure, same considerations as EWD ERP
 

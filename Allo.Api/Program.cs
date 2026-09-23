@@ -83,7 +83,18 @@ builder.Services.AddSingleton<IPasswordHasher<UserLogin>, PasswordHasher<UserLog
 // caller claim any address they like and walk straight around the login rate limit. An
 // empty list leaves the middleware out of the pipeline entirely, which is what a direct
 // run on the LAN wants.
-var knownProxies = builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [];
+// Blank entries mean "no proxy". A container sets an unfilled variable to an empty string
+// rather than leaving it out, so treating "" as an address stops the app from starting.
+var knownProxies = (builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
+    .Select(proxy => proxy?.Trim())
+    .Where(proxy => !string.IsNullOrEmpty(proxy))
+    .Select(proxy => IPAddress.TryParse(proxy, out var address)
+        ? address
+        // Fail here, naming the value: the alternative is a FormatException from deep
+        // inside the options factory the first time a request arrives.
+        : throw new InvalidOperationException(
+            $"ForwardedHeaders:KnownProxies contains \"{proxy}\", which is not an IP address."))
+    .ToArray();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
@@ -91,12 +102,19 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
     foreach (var proxy in knownProxies)
     {
-        options.KnownProxies.Add(IPAddress.Parse(proxy));
+        options.KnownProxies.Add(proxy);
     }
 });
 
 // Slows password guessing: 5 login attempts per minute per client address by default.
-var loginAttemptsPerMinute = builder.Configuration.GetValue("Auth:LoginAttemptsPerMinute", 5);
+// Parsed rather than bound, because a container hands over a cleared variable as an empty
+// string and binding that to an int refuses to start the app. A missing or unusable value
+// falls back to the default: a running app with the standard limit beats no app at all.
+var loginAttemptsPerMinute =
+    int.TryParse(builder.Configuration["Auth:LoginAttemptsPerMinute"], out var configuredAttempts)
+    && configuredAttempts > 0
+        ? configuredAttempts
+        : 5;
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;

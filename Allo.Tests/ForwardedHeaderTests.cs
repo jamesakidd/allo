@@ -41,6 +41,29 @@ public class ForwardedHeaderTests
         Assert.Empty(options.KnownIPNetworks);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ABlankProxyValue_MeansNoProxy(string value)
+    {
+        // Unraid, and containers generally, set an unfilled variable to an empty string
+        // rather than leaving it out. Treating that as an address stopped the app from
+        // starting at all: IPAddress.Parse("") throws inside the options factory.
+        var options = Options(("ForwardedHeaders:KnownProxies:0", value));
+
+        Assert.Empty(options.KnownProxies);
+    }
+
+    [Fact]
+    public void AnAddressThatIsNotAnAddress_FailsWithSomethingReadable()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            Options(("ForwardedHeaders:KnownProxies:0", "nginx.local")));
+
+        Assert.Contains("nginx.local", error.Message);
+        Assert.Contains("ForwardedHeaders:KnownProxies", error.Message);
+    }
+
     [Fact]
     public void BothTheClientAddressAndTheSchemeAreForwarded()
     {
