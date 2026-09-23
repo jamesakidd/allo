@@ -147,7 +147,7 @@ No SignalR in v1. Refresh on app focus plus pull-to-refresh is enough.
 - [x] `SyncEntity` base, minimal `User` table, entities in `Allo.Shared`, EF config in `Allo.Api`
 - [x] `Category` with self-referencing `ParentId`, seeded top-level set (Produce, Bakery, Dairy, Meat & Seafood, Frozen, Pantry, Beverages, Snacks, Household, Personal Care, Baby, Pet, Uncategorized)
 - [x] `Store` + `StoreCategoryOrder` tables, `Category.SortOrder` as the default walking order
-- [ ] Copy `Category.SortOrder` into `StoreCategoryOrder` when a store is created (lands with the store create endpoint)
+- [x] Copy `Category.SortOrder` into `StoreCategoryOrder` when a store is created (`ListActions.CreateStore`)
 - [x] `Unit` enum in `Allo.Shared` (`ea`, `g`, `kg`, `lb`, `ml`, `l`, `gal`, `bunch`, `dozen`), members named in full (`Unit.Kilogram`) with `IsCountUnit`/`ToCode`/`FromCode` helpers; EF `UnitConverter` and `[JsonStringEnumMemberName]` store and send the lowercase code, never an int
 - [x] `Item` catalog table with `DefaultUnit`, and `Aliases` and `DefaultTags` as JSON columns
 - [x] `ShoppingList` + `ListEntry`, with `CategoryId`, `AddedBy`, `UpdatedAt`, `UpdatedBy`, `IsChecked`, `CheckedAt`, `CheckedBy`, `IsDeleted`, `Sequence`
@@ -221,7 +221,7 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 - [x] Sync status indicator: last synced time and pending change count. Not a spinner. "3 changes pending" reads as working, an ambiguous spinner reads as broken (`SyncStatus` in the app bar: "Synced 2 min ago", "3 changes pending", "Offline")
 - [x] Duplicate catalog items: two devices can create "oat milk" offline with different ids (`Item.NormalizedName` is deliberately not unique). Sync must merge them: keep one, repoint entries, tombstone the other. (Built as: the server never inserts the second one; it repoints that push's entries and returns an `ItemRemap`, and the phone swaps the id locally)
 - [x] Test properly in airplane mode: add, check off, edit, delete, then reconnect (automated in `SyncEngineTests` with two simulated phones)
-- [ ] Same airplane-mode run on real phones once deployed
+- [x] Verified over the internet against the live instance: network off, deep route `/stores` reloaded from cache in 646ms. **Still to do by hand: a real phone, in a real store.**
 - [x] Split checked state into its own resolution field set: `IsChecked`, `CheckedAt`, `CheckedBy`, resolved independently of the `UpdatedAt` that covers quantity, unit, note, category, and tags. Two resolution rules per entry, not one. Handles the real collision: she changes milk 1 to 2 while you check milk off, both offline. Plain row-level LWW loses one of those changes. Do this before building sync, not after (retrofitting means a migration and a protocol change)
 - [x] Server-side monotonic sequence counter instead of timestamps for the sync cursor. Every accepted change gets the next number; client cursor is that number, pull is "everything with seq > N". Immune to phone clock drift, which otherwise lets a device that is 10 minutes fast win every conflict for 10 minutes. SQLite has no `rowversion`, so use an AUTOINCREMENT change-log table or a single counter row
 
@@ -241,7 +241,7 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 - [x] Keep the keyboard up when adding multiple items in a row
 - [x] Dark theme (the example app is dark and it is the right call for a store)
 - [x] Manifest and icons verified installable on localhost (secure context), shell served from cache with the network off, including a deep route
-- [ ] Verify home screen install on Android — needs the real certificate, so it lands with Deployment
+- [x] Installability verified over the real certificate: secure context, worker active, 75 shell entries cached, manifest `standalone` with both maskable icons resolving. **Still to do by hand: actually add it to an Android home screen.**
 
 ## Auth
 
@@ -260,7 +260,7 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 - [x] Client remembers the logged-in user on the device, so the app opens with no signal; only a real 401 logs out
 - [ ] Remove a family member (not built; would need a tombstone rather than a delete, since entries reference users)
 - [x] Confirm the offline flow behaves when the cookie has expired (do not silently discard queued changes): a 401 during sync sends the user to log in and keeps the queue, which goes up after login
-- [ ] Re-check the expired-cookie flow once the service worker caches the app shell (PWA section)
+- [x] Re-check the expired-cookie flow once the service worker caches the app shell (PWA section) — the worry was that a cached shell would let the app open with a dead cookie and quietly drop queued changes. It cannot: the worker never caches `/api` (verified against the live instance, 75 cached entries and none of them API), so a 401 still reaches the app, still sets `NeedsLogin`, and the queue still survives in local storage as `SyncEngineTests` covers
 - [x] Logging out with unsynced changes warns, and keeps them on the device for the next login
 
 ## Deployment
@@ -280,7 +280,10 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 - [x] Make the GHCR package public after the first publish, so Unraid pulls with no login (the ERP's private package needs a `docker login` that does not survive a reboot, since Unraid's rootfs is RAM-backed)
 - [x] **First deploy, 2026-09-22: running on Unraid at `192.168.1.185:8080`, br0, image `0.1.2`.** Verified against the live container: security headers present, Brotli served (`dotnet.native.wasm` 2.77MB → 932KB on the wire), `/api` 401s without a login, and a container restart kept both the list *and* the session — so the database and the data protection keys are genuinely on the bind mount, which is the failure that would otherwise stay invisible until the first update
 - [x] SQLite file on a bind-mounted appdata volume — one `/appdata` volume holds the database *and* the data protection keys, since losing the keys logs the whole family out
-- [ ] NPM reverse proxy on a No-IP subdomain with a valid Let's Encrypt cert (required for service worker and home screen install; do not rely on Tailscale, family members will not have the tailnet up in a store)
+- [x] NPM reverse proxy on a No-IP subdomain with a valid Let's Encrypt cert (required for service worker and home screen install; do not rely on Tailscale, family members will not have the tailnet up in a store)
+  - Live at `https://allolist.ddns.net` → `192.168.1.185:8080`. Force SSL, HTTP/2, HSTS (`max-age=63072000; preload`), websockets off, NPM asset caching off so it can never serve a stale `service-worker.js` or `index.html`
+  - **NPM does not persist Force SSL / HSTS when they are set in the Add dialog, before the certificate exists.** Both silently did nothing until the host was re-saved with the issued cert selected. Symptom: port 80 served the app instead of redirecting, and no HSTS header
+  - Verified from outside: 301 to https, HSTS present, Brotli intact through the proxy (`dotnet.native.wasm` 932KB), and the auth cookie now comes back `secure` — which only happens when `X-Forwarded-Proto` is read from a trusted proxy, so forwarded headers are confirmed working and the rate limiter partitions by real client address
 - [x] Backup: scheduled copy of the SQLite file, plus a manual copy before any container update — `deploy/backup-allo.sh`, for the User Scripts plugin, 30-day retention
   - Archives the database **and** the data protection keys together. Restoring a database without its keys leaves everyone logged out with an undecryptable cookie
   - Stops the container for the copy. SQLite is a file, not a server: a copy taken mid-write can be torn, and the tear is silent until restore time. A few seconds of downtime for a shopping list is the cheap side of that trade, and it needs no `sqlite3` on the host or in the image
@@ -306,7 +309,7 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 
 ## Misc / Cosmetic
 
-- [ ] App icon and favicon
+- [x] App icon and favicon (shipped with the logo work: favicon, apple-touch-icon, maskable 192/512)
 - [x] Docker logo for the Unraid dockers page — the template points at `icon-192.png` on raw.githubusercontent.com
 - [x] Empty state for a fresh list
 - [ ] Import: paste a block of text, one item per line, bulk-add with categorization suggestions
@@ -319,3 +322,4 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 - [ ] Barcode scan to add (browser camera API, accuracy will be the problem)
 - [ ] Meal planning that generates list entries
 - [ ] Create a "families" class above users so this app can be used by some friends and they can have their own data set and shared lists among their own users. This will probably require email invites. 
+- [ ] some kind of way of enabling a desktop UI
