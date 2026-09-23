@@ -317,10 +317,10 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 - [x] App icon and favicon (shipped with the logo work: favicon, apple-touch-icon, maskable 192/512)
 - [x] Docker logo for the Unraid dockers page — the template points at `icon-192.png` on raw.githubusercontent.com
 - [x] Empty state for a fresh list
-- [ ] Import: paste a block of text, one item per line, bulk-add with categorization suggestions
 
 ## Parked / Later
 
+- [ ] Import: paste a block of text, one item per line, bulk-add with categorization suggestions. **Cancelled 2026-09-23** — it existed to make the move off Flipp painless, and that list turned out small enough to type in by hand. Revive only if a bulk paste is wanted for its own sake
 - [ ] Real-time push via SignalR (only if focus-refresh proves insufficient)
 - [ ] Price history per item per store, manually entered
 - [ ] Recurring staples with a suggested cadence
