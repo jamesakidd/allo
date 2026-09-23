@@ -241,7 +241,8 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 - [x] Keep the keyboard up when adding multiple items in a row
 - [x] Dark theme (the example app is dark and it is the right call for a store)
 - [x] Manifest and icons verified installable on localhost (secure context), shell served from cache with the network off, including a deep route
-- [x] Installability verified over the real certificate: secure context, worker active, 75 shell entries cached, manifest `standalone` with both maskable icons resolving. **Still to do by hand: actually add it to an Android home screen.**
+- [x] Installed on Android from Chrome and working: real WebAPK, correct icon, standalone with no address bar. Verified beforehand over the real certificate too — secure context, worker active, 75 shell entries cached, manifest `standalone` with both maskable icons resolving
+  - **Tell the family to install from Chrome.** Firefox for Android makes a plain launcher shortcut instead of a WebAPK: it works, but the icon comes out blank, and its "App info" points at Firefox, so it is removed with Remove rather than uninstalled. Nothing to do with our icons — they measure correct (opaque, artwork at 62% of the canvas against an 80% safe zone, right MIME type)
 
 ## Auth
 
