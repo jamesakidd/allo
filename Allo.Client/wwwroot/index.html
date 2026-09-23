@@ -3,7 +3,11 @@
 
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- interactive-widget=resizes-content: the soft keyboard shrinks the layout viewport
+         instead of sliding over it, so the add bar's "bottom: 0" lands directly above the
+         keyboard and the list scrolls in what is left. Without it the bar sits behind the
+         keyboard and you have to scroll to find either the list or the field you are typing in. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#1b1d21" />
     <title>Allo</title>
     <base href="/" />
