@@ -6,7 +6,12 @@ grocery store.
 No flyers, no deals, no scraping, no accounts on someone else's server. Fast entry,
 categories you control, and sync that survives a bad signal.
 
-<!-- Add a screenshot here: ![The list](docs/screenshot.png) -->
+<p align="center">
+  <img src="docs/screenshot.png" width="340"
+       alt="The list on a phone: categories in walking order with counts, quantities with units, tags as chips, coloured store pills, and checked items collected into an 'In the cart' section at the bottom.">
+</p>
+
+<p align="center"><sub>Categories in walking order · tags you can filter on · per-store pills · checked items out of the way but still reviewable</sub></p>
 
 ## The constraint that drives everything
 
