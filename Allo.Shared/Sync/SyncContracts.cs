@@ -11,6 +11,8 @@ public enum SyncTable
     Item,
     ShoppingList,
     ListEntry,
+    TaskList,
+    TaskEntry,
 }
 
 // Rows for every synced table. Pulls carry full rows; pushes carry the content field
@@ -23,9 +25,11 @@ public sealed class SyncRows
     public List<Item> Items { get; set; } = [];
     public List<ShoppingList> Lists { get; set; } = [];
     public List<ListEntry> Entries { get; set; } = [];
+    public List<TaskList> TaskLists { get; set; } = [];
+    public List<TaskEntry> Tasks { get; set; } = [];
 
     public bool IsEmpty => Categories.Count + Stores.Count + StoreCategoryOrders.Count + Items.Count
-        + Lists.Count + Entries.Count == 0;
+        + Lists.Count + Entries.Count + TaskLists.Count + Tasks.Count == 0;
 }
 
 // GET /api/sync?since=N: everything with Sequence > N, tombstones included.
@@ -40,13 +44,18 @@ public sealed class SyncPullResponse
 
 public sealed record EntryCheck(Guid EntryId, bool IsChecked, DateTimeOffset CheckedAt);
 
+// The task equivalent of EntryCheck: the done group travels on its own so ticking a task
+// off never overwrites someone else's edit to its title or priority.
+public sealed record TaskDone(Guid TaskId, bool IsDone, DateTimeOffset DoneAt);
+
 // POST /api/sync
 public sealed class SyncPushRequest
 {
     public SyncRows Rows { get; set; } = new();
     public List<EntryCheck> Checks { get; set; } = [];
+    public List<TaskDone> Dones { get; set; } = [];
 
-    public bool IsEmpty => Rows.IsEmpty && Checks.Count == 0;
+    public bool IsEmpty => Rows.IsEmpty && Checks.Count == 0 && Dones.Count == 0;
 }
 
 // A new item that matched an existing item's name was merged into it: the client should

@@ -13,11 +13,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Item> Items => Set<Item>();
     public DbSet<ShoppingList> ShoppingLists => Set<ShoppingList>();
     public DbSet<ListEntry> ListEntries => Set<ListEntry>();
+    public DbSet<TaskList> TaskLists => Set<TaskList>();
+    public DbSet<TaskEntry> TaskEntries => Set<TaskEntry>();
     public DbSet<SyncCounter> SyncCounter => Set<SyncCounter>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.Properties<Unit>().HaveConversion<UnitConverter>();
+        configurationBuilder.Properties<Priority>().HaveConversion<PriorityConverter>();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -79,6 +82,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne<Store>().WithMany().HasForeignKey(le => le.StoreId);
             e.HasOne<User>().WithMany().HasForeignKey(le => le.AddedBy);
             e.HasOne<User>().WithMany().HasForeignKey(le => le.CheckedBy);
+        });
+
+        modelBuilder.Entity<TaskList>(e =>
+        {
+            e.Property(l => l.Name).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<TaskEntry>(e =>
+        {
+            e.Property(t => t.Title).HasMaxLength(200);
+            e.Property(t => t.Note).HasMaxLength(500);
+            e.HasIndex(t => t.TaskListId);
+            e.HasOne<TaskList>().WithMany().HasForeignKey(t => t.TaskListId);
+            e.HasOne<User>().WithMany().HasForeignKey(t => t.AddedBy);
+            e.HasOne<User>().WithMany().HasForeignKey(t => t.DoneBy);
         });
 
         modelBuilder.Entity<SyncCounter>(e =>

@@ -9,6 +9,7 @@ public static class SyncValidation
 {
     public const int NameMaxLength = 100;
     public const int ItemNameMaxLength = 200;
+    public const int TitleMaxLength = 200;
     public const int NoteMaxLength = 500;
     public const int TagMaxLength = 50;
 
@@ -20,6 +21,23 @@ public static class SyncValidation
     public static string? Validate(ShoppingList list) => Name(list.Name, NameMaxLength);
 
     public static string? Validate(StoreCategoryOrder order) => null;
+
+    public static string? Validate(TaskList list) => Name(list.Name, NameMaxLength);
+
+    public static string? Validate(TaskEntry task)
+    {
+        if (Name(task.Title, TitleMaxLength, "Title") is { } titleError)
+        {
+            return titleError;
+        }
+        if (!Enum.IsDefined(task.Priority))
+        {
+            return "Unknown priority.";
+        }
+        return task.Note is { Length: > NoteMaxLength }
+            ? $"Note must be at most {NoteMaxLength} characters."
+            : null;
+    }
 
     public static string? Validate(Item item) =>
         Name(item.Name, ItemNameMaxLength) ?? UnitDefined(item.DefaultUnit);
@@ -54,9 +72,9 @@ public static class SyncValidation
             ? null
             : "Colour must look like #66bb6a.";
 
-    private static string? Name(string? name, int maxLength) =>
-        string.IsNullOrWhiteSpace(name) ? "Name is required."
-        : name.Trim().Length > maxLength ? $"Name must be at most {maxLength} characters."
+    private static string? Name(string? name, int maxLength, string label = "Name") =>
+        string.IsNullOrWhiteSpace(name) ? $"{label} is required."
+        : name.Trim().Length > maxLength ? $"{label} must be at most {maxLength} characters."
         : null;
 
     private static string? UnitDefined(Unit unit) =>

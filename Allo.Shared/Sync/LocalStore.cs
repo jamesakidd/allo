@@ -22,6 +22,7 @@ public sealed class LocalStore(ISyncStorage storage, TimeProvider time)
     private const string Prefix = "allo.sync.";
     private const string Content = "content";
     private const string Checked = "checked";
+    private const string Done = "done";
 
     private readonly Table<Category> _categories = new(SyncTable.Category, "categories", c => c.Id.ToString());
     private readonly Table<Store> _stores = new(SyncTable.Store, "stores", s => s.Id.ToString());
@@ -29,6 +30,8 @@ public sealed class LocalStore(ISyncStorage storage, TimeProvider time)
     private readonly Table<Item> _items = new(SyncTable.Item, "items", i => i.Id.ToString());
     private readonly Table<ShoppingList> _lists = new(SyncTable.ShoppingList, "lists", l => l.Id.ToString());
     private readonly Table<ListEntry> _entries = new(SyncTable.ListEntry, "entries", e => e.Id.ToString());
+    private readonly Table<TaskList> _taskLists = new(SyncTable.TaskList, "taskLists", l => l.Id.ToString());
+    private readonly Table<TaskEntry> _tasks = new(SyncTable.TaskEntry, "tasks", t => t.Id.ToString());
     private Meta _meta = new();
     private bool _metaDirty;
 
@@ -45,6 +48,8 @@ public sealed class LocalStore(ISyncStorage storage, TimeProvider time)
     public IReadOnlyCollection<Item> Items => _items.Rows.Values;
     public IReadOnlyCollection<ShoppingList> Lists => _lists.Rows.Values;
     public IReadOnlyCollection<ListEntry> Entries => _entries.Rows.Values;
+    public IReadOnlyCollection<TaskList> TaskLists => _taskLists.Rows.Values;
+    public IReadOnlyCollection<TaskEntry> Tasks => _tasks.Rows.Values;
     public IReadOnlyList<FamilyMember> Users => _meta.Users;
 
     public long Cursor => _meta.Cursor;
@@ -92,6 +97,20 @@ public sealed class LocalStore(ISyncStorage storage, TimeProvider time)
         return AfterLocalChangeAsync();
     }
 
+    public Task SetDoneAsync(Guid taskId, bool isDone, Guid userId)
+    {
+        if (!_tasks.Rows.TryGetValue(taskId.ToString(), out var task))
+        {
+            throw new InvalidOperationException($"Unknown task {taskId}.");
+        }
+        task.IsDone = isDone;
+        task.DoneAt = time.GetUtcNow();
+        task.DoneBy = userId;
+        _tasks.Dirty = true;
+        Mark(_tasks, task.Id.ToString(), Done);
+        return AfterLocalChangeAsync();
+    }
+
     // What to push: current values of every marked row, with the revision each marker had,
     // so markers re-set by edits made during the push aren't cleared by its response.
     public PushSnapshot TakeSnapshot()
@@ -114,6 +133,14 @@ public sealed class LocalStore(ISyncStorage storage, TimeProvider time)
                     }
                     break;
                 case SyncTable.ListEntry: AddContent(request.Rows.Entries, _entries, key); break;
+                case SyncTable.TaskList: AddContent(request.Rows.TaskLists, _taskLists, key); break;
+                case SyncTable.TaskEntry when group == Done:
+                    if (_tasks.Rows.TryGetValue(key, out var task))
+                    {
+                        request.Dones.Add(new TaskDone(task.Id, task.IsDone, task.DoneAt ?? time.GetUtcNow()));
+                    }
+                    break;
+                case SyncTable.TaskEntry: AddContent(request.Rows.Tasks, _tasks, key); break;
             }
         }
         return new PushSnapshot(request, new Dictionary<string, long>(_meta.Pending));
@@ -181,37 +208,45 @@ public sealed class LocalStore(ISyncStorage storage, TimeProvider time)
         ApplyServerRows(_items, rows.Items, force);
         ApplyServerRows(_lists, rows.Lists, force);
 
-        foreach (var row in rows.Entries)
-        {
-            var key = row.Id.ToString();
-            _entries.Rows.TryGetValue(key, out var local);
-            var contentPending = !force && IsMarked(SyncTable.ListEntry, key, Content);
-            var checkedPending = !force && IsMarked(SyncTable.ListEntry, key, Checked);
+        ApplyServerRows(_taskLists, rows.TaskLists, force);
+        ApplyTwoGroupRows(_entries, rows.Entries, force, Checked, CopyChecked);
+        ApplyTwoGroupRows(_tasks, rows.Tasks, force, Done, CopyDone);
+    }
 
-            if (row.IsDeleted || local is null || (!contentPending && !checkedPending))
+    // A row whose second field group syncs independently of its content. Whichever group
+    // is still waiting to be pushed keeps its local values; the other takes the server's.
+    private void ApplyTwoGroupRows<T>(Table<T> table, List<T> rows, bool force, string secondGroup,
+        Action<T, T> copySecondGroup) where T : SyncEntity
+    {
+        foreach (var row in rows)
+        {
+            var key = table.Key(row);
+            table.Rows.TryGetValue(key, out var local);
+            var contentPending = !force && IsMarked(table.Name, key, Content);
+            var secondPending = !force && IsMarked(table.Name, key, secondGroup);
+
+            if (row.IsDeleted || local is null || (!contentPending && !secondPending))
             {
                 if (row.IsDeleted)
                 {
-                    Unmark(SyncTable.ListEntry, key);
+                    Unmark(table.Name, key);
                 }
-                _entries.Put(row);
+                table.Put(row);
                 continue;
             }
             if (contentPending)
             {
-                // Keep the local content; take the server's checked state unless that's
-                // pending locally too.
-                if (!checkedPending)
+                if (!secondPending)
                 {
-                    CopyChecked(local, row);
+                    copySecondGroup(local, row);
                 }
                 local.Sequence = row.Sequence;
-                _entries.Dirty = true;
+                table.Dirty = true;
             }
             else
             {
-                CopyChecked(row, local);
-                _entries.Put(row);
+                copySecondGroup(row, local);
+                table.Put(row);
             }
         }
     }
@@ -240,6 +275,13 @@ public sealed class LocalStore(ISyncStorage storage, TimeProvider time)
         to.CheckedBy = from.CheckedBy;
     }
 
+    private static void CopyDone(TaskEntry to, TaskEntry from)
+    {
+        to.IsDone = from.IsDone;
+        to.DoneAt = from.DoneAt;
+        to.DoneBy = from.DoneBy;
+    }
+
     private static void AddContent<T>(List<T> into, Table<T> table, string key) where T : SyncEntity
     {
         if (table.Rows.TryGetValue(key, out var row))
@@ -262,6 +304,7 @@ public sealed class LocalStore(ISyncStorage storage, TimeProvider time)
     {
         _metaDirty |= _meta.Pending.Remove(Marker(table, key, Content));
         _metaDirty |= _meta.Pending.Remove(Marker(table, key, Checked));
+        _metaDirty |= _meta.Pending.Remove(Marker(table, key, Done));
     }
 
     private static string Marker(SyncTable table, string key, string group) => $"{table}|{key}|{group}";
@@ -296,7 +339,7 @@ public sealed class LocalStore(ISyncStorage storage, TimeProvider time)
         AllTables.OfType<Table<T>>().SingleOrDefault()
         ?? throw new InvalidOperationException($"{typeof(T).Name} is not a synced table.");
 
-    private ITable[] AllTables => [_categories, _stores, _orders, _items, _lists, _entries];
+    private ITable[] AllTables => [_categories, _stores, _orders, _items, _lists, _entries, _taskLists, _tasks];
 
     private interface ITable
     {

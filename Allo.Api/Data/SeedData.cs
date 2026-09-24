@@ -50,6 +50,15 @@ public static class SeedData
             UpdatedAt = SeedTime,
         });
 
+        // One task list to land in, same idea as "Groceries".
+        modelBuilder.Entity<TaskList>().HasData(new TaskList
+        {
+            Id = TaskList.DefaultId,
+            Name = "Tasks",
+            Sequence = SeedSequence,
+            UpdatedAt = SeedTime,
+        });
+
         modelBuilder.Entity<SyncCounter>().HasData(new SyncCounter { Id = 1, Value = SeedSequence });
     }
 }

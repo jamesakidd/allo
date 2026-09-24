@@ -53,7 +53,17 @@ public sealed class SyncApplier(AppDbContext db, Guid userId)
                     e.AddedBy = userId;
                     e.CheckedBy = e.IsChecked ? userId : null;
                 });
+            await ApplyRowsAsync(SyncTable.TaskList, request.Rows.TaskLists, l => l.Id.ToString(),
+                l => db.TaskLists.FindAsync(l.Id), l => Task.FromResult(SyncValidation.Validate(l)),
+                (to, from) => to.Name = from.Name.Trim());
+            await ApplyRowsAsync(SyncTable.TaskEntry, request.Rows.Tasks, t => t.Id.ToString(),
+                t => db.TaskEntries.FindAsync(t.Id), CheckAsync, CopyTaskContent, onCreate: t =>
+                {
+                    t.AddedBy = userId;
+                    t.DoneBy = t.IsDone ? userId : null;
+                });
             await ApplyChecksAsync(request.Checks);
+            await ApplyDonesAsync(request.Dones);
             await transaction.CommitAsync();
         }
 
@@ -118,6 +128,29 @@ public sealed class SyncApplier(AppDbContext db, Guid userId)
             entry.CheckedAt = check.CheckedAt;
             entry.CheckedBy = userId;
             await SaveOrRejectAsync(SyncTable.ListEntry, check.EntryId.ToString());
+        }
+    }
+
+    // The done group: IsDone, DoneAt, DoneBy. Independent of content, so ticking a task off
+    // doesn't undo someone else's change to its title or priority.
+    private async Task ApplyDonesAsync(IEnumerable<TaskDone> dones)
+    {
+        foreach (var done in dones)
+        {
+            var task = await db.TaskEntries.FindAsync(done.TaskId);
+            if (task is null)
+            {
+                Reject(SyncTable.TaskEntry, done.TaskId.ToString(), "Unknown task.");
+                continue;
+            }
+            if (task.IsDeleted)
+            {
+                continue;
+            }
+            task.IsDone = done.IsDone;
+            task.DoneAt = done.DoneAt;
+            task.DoneBy = userId;
+            await SaveOrRejectAsync(SyncTable.TaskEntry, done.TaskId.ToString());
         }
     }
 
@@ -193,6 +226,11 @@ public sealed class SyncApplier(AppDbContext db, Guid userId)
             : null;
     }
 
+    private async Task<string?> CheckAsync(TaskEntry task) =>
+        SyncValidation.Validate(task) is { } error ? error
+        : await db.TaskLists.FindAsync(task.TaskListId) is null ? "Unknown task list."
+        : null;
+
     private static void CopyItem(Item to, Item from)
     {
         to.Name = from.Name;
@@ -218,6 +256,15 @@ public sealed class SyncApplier(AppDbContext db, Guid userId)
         to.Note = string.IsNullOrWhiteSpace(from.Note) ? null : from.Note.Trim();
         to.StoreId = from.StoreId;
         to.Tags = [.. from.Tags.Select(t => t.Trim())];
+    }
+
+    private static void CopyTaskContent(TaskEntry to, TaskEntry from)
+    {
+        to.TaskListId = from.TaskListId;
+        to.Title = from.Title.Trim();
+        to.Priority = from.Priority;
+        to.DueOn = from.DueOn;
+        to.Note = string.IsNullOrWhiteSpace(from.Note) ? null : from.Note.Trim();
     }
 
     // Parents before children within the batch, so a new subcategory and its new parent
@@ -267,6 +314,12 @@ public sealed class SyncApplier(AppDbContext db, Guid userId)
                     break;
                 case SyncTable.ListEntry when Guid.TryParse(rejection.Key, out var id):
                     AddIfFound(current.Entries, await db.ListEntries.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id));
+                    break;
+                case SyncTable.TaskList when Guid.TryParse(rejection.Key, out var id):
+                    AddIfFound(current.TaskLists, await db.TaskLists.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id));
+                    break;
+                case SyncTable.TaskEntry when Guid.TryParse(rejection.Key, out var id):
+                    AddIfFound(current.Tasks, await db.TaskEntries.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id));
                     break;
                 case SyncTable.StoreCategoryOrder:
                     var parts = rejection.Key.Split(':');

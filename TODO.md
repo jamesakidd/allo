@@ -228,24 +228,26 @@ a fake catalog item per task would pollute the catalog that learns categories an
 autocomplete that ranks by use count. "milk" belongs in that catalog; "call the plumber" does
 not.
 
-- [ ] `TaskList` (id, name) and `TaskEntry` (id, taskListId, title, priority, dueOn, note, addedBy, isDone, doneAt, doneBy), both `SyncEntity`
+- [x] `TaskList` (id, name) and `TaskEntry` (id, taskListId, title, priority, dueOn, note, addedBy, isDone, doneAt, doneBy), both `SyncEntity`
   - Two field groups, mirroring `ListEntry` exactly so conflict resolution is the existing logic: content (title, priority, dueOn, note, list) under `UpdatedAt`/`UpdatedBy`, done-state (`IsDone`) under `DoneAt`/`DoneBy`. Reprioritising while someone else ticks it off keeps both changes
   - `Title` is free text, not a catalog lookup. No learning, no autocomplete, no normalization beyond trimming
-- [ ] `Priority` enum in `Allo.Shared`: `high`, `normal`, `low`, defaulting to `normal`
+- [x] `Priority` enum in `Allo.Shared`: `high`, `normal`, `low`, defaulting to `normal`
   - Stored as the string code like `Unit`, never the integer, so the data stays readable and adding a level later never renumbers existing rows
   - Sorted by an explicit rank, not by enum order, since the stored value is a string
   - Priority is to tasks what category is to groceries: the thing that groups and orders the screen
-- [ ] `DueOn` as a **date, not a timestamp** (`DateOnly?`)
+- [x] `DueOn` as a **date, not a timestamp** (`DateOnly?`)
   - The app stores UTC. An evening due-time in UTC displays as the previous day depending on where you are, and a household task has no business carrying a timezone. A date also maps cleanly to an all-day calendar event
-  - Overdue rows get a visual treatment; sorting folds the date in under priority
-- [ ] Several task lists from the start (House, Garden, Errands…), with a selector like the store picker
+  - Overdue rows get a visual treatment; sorting folds the date in under priority (screen work, not yet built)
+  - Verified in the database: a task stores `high 2026-10-01` — the priority code, and a date with no time and no offset, so nothing can shift a due date across midnight
+- [ ] Several task lists from the start (House, Garden, Errands…), with a selector like the store picker — the model and sync already carry a list id and a new list plus its tasks can arrive in one push; what's left is the UI
 - [ ] Tasks screen: its own sidebar entry, grouped by priority, with a "Done" section at the bottom reusing the In-the-cart pattern
 - [ ] Reuse the add bar: type a title, press enter, keep typing. Priority and due date are set in an edit sheet, not in the add flow — adding must stay one gesture
 - [ ] **Stretch: add to calendar.** When a task has a due date, offer a button that hands the phone a generated `.ics` file
   - Generated on the device, so it works offline and does not assume anyone's calendar provider. Not a Google Calendar link, which needs a network and assumes Google
   - An all-day `VEVENT` from `DueOn`, titled from the task
   - **Check against the CSP first.** `default-src 'self'` is deliberately strict and may block handing the browser a generated file; find that on the bench, not after a release
-- [ ] Guardrail tests: a task list query must never return a shopping list (and vice versa); priority must group without affecting what is inside a group; a task with no due date must never appear overdue
+- [x] Guardrail: a task list query never returns a shopping list and vice versa, and a task cannot be parked on a shopping list id (`TaskSyncTests`). Also covered: deletes final, done-group independence, who-ticked-it from the login not the payload, and the offline paths in `TaskOfflineTests`
+- [ ] Remaining guardrails, once the screen exists: priority must group without affecting order inside a group; a task with no due date must never appear overdue
 
 **Deliberately not in scope**, so the screen stays a task list rather than a project manager:
 

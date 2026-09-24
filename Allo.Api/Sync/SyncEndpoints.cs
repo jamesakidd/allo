@@ -32,6 +32,8 @@ public static class SyncEndpoints
                 Items = await db.Items.AsNoTracking().Where(r => r.Sequence > since).ToListAsync(),
                 Lists = await db.ShoppingLists.AsNoTracking().Where(r => r.Sequence > since).ToListAsync(),
                 Entries = await db.ListEntries.AsNoTracking().Where(r => r.Sequence > since).ToListAsync(),
+                TaskLists = await db.TaskLists.AsNoTracking().Where(r => r.Sequence > since).ToListAsync(),
+                Tasks = await db.TaskEntries.AsNoTracking().Where(r => r.Sequence > since).ToListAsync(),
             },
             Users = await db.UserLogins
                 .Join(db.Users, l => l.UserId, u => u.Id, (l, u) => new FamilyMember(u.Id, l.Username, u.DisplayName))
