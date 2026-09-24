@@ -240,7 +240,9 @@ not.
   - The app stores UTC. An evening due-time in UTC displays as the previous day depending on where you are, and a household task has no business carrying a timezone. A date also maps cleanly to an all-day calendar event
   - Overdue rows get a red pill, today's a green one, anything further out is plain — a date earns colour only when it matters
   - Verified in the database: a task stores `high 2026-10-01` — the priority code, and a date with no time and no offset, so nothing can shift a due date across midnight
-- [x] Several task lists from the start (House, Garden, Errands…), with a selector like the store picker. The selector only appears when there is more than one list, same as the shopping list's. Creating and renaming lists is in `TaskActions`; the last list cannot be deleted, since the screen would have nowhere to put anything
+- [x] Several task lists from the start (House, Garden, Errands…). The picker at the top of Tasks always shows, with "+ New list…" at the bottom of it and an edit menu beside it for rename and delete. A new list becomes the current one; the last list cannot be deleted, since the screen would have nowhere to put anything
+  - **Missed on the first pass and caught in use (2026-09-24):** the model, sync and `TaskActions` were built and tested, but nothing in the UI called them, and the picker only rendered once a second list existed — so a second list could never be made. A control that hides until it's needed can make its own feature unreachable
+  - Picking "+ New list…" then cancelling must not leave the picker reading "+ New list…" over the list you're really on. MudSelect takes the value into its own state before asking the page, so the picker is rebuilt after that choice
 - [x] Tasks screen: its own sidebar entry, grouped by priority, with a "Done" section at the bottom reusing the In-the-cart pattern
 - [x] Reuse the add bar: type a title, press enter, keep typing. Priority and due date are set in an edit sheet, not in the add flow — adding stays one gesture, with a "set priority or date" shortcut on the last thing added
 - [x] **Add to calendar.** A task with a due date offers a button that hands the phone a generated `.ics`
@@ -382,5 +384,4 @@ client plugs in browser storage (`BrowserSyncStorage`) and decides when to sync 
 - [ ] Recurring staples with a suggested cadence
 - [ ] Barcode scan to add (browser camera API, accuracy will be the problem)
 - [ ] Meal planning that generates list entries
-- [ ] Create a "families" class above users so this app can be used by some friends and they can have their own data set and shared lists among their own users. This will probably require email invites. 
 - [ ] some kind of way of enabling a desktop UI

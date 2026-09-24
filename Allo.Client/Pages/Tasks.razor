@@ -12,18 +12,33 @@
 <PageTitle>allo · tasks</PageTitle>
 
 <div class="list-page">
-    @if (Lists.Count > 1)
-    {
-        <div class="list-selectors">
-            <MudSelect T="Guid" Value="Ui.TaskListId" ValueChanged="Ui.SetTaskListAsync" Dense="true"
-                       Variant="Variant.Outlined" Margin="Margin.Dense" Label="List">
-                @foreach (var list in Lists)
-                {
-                    <MudSelectItem T="Guid" Value="@list.Id">@list.Name</MudSelectItem>
-                }
-            </MudSelect>
-        </div>
-    }
+    @* Always shown, even with one list: it's also where a new list is made. Hiding it
+       until a second list existed is what made several lists unreachable. *@
+    <div class="list-selectors">
+        <MudSelect @key="_pickerVersion" T="Guid" Value="Ui.TaskListId" ValueChanged="SelectListAsync" Dense="true"
+                   Variant="Variant.Outlined" Margin="Margin.Dense" Label="List">
+            @foreach (var list in Lists)
+            {
+                <MudSelectItem T="Guid" Value="@list.Id">@list.Name</MudSelectItem>
+            }
+            <MudSelectItem T="Guid" Value="NewListChoice">
+                <span class="new-list-choice">+ New list…</span>
+            </MudSelectItem>
+        </MudSelect>
+        <MudMenu Icon="@Icons.Material.Filled.Edit" AriaLabel="Manage this list" Dense="true"
+                 AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+            <MudMenuItem Icon="@Icons.Material.Filled.DriveFileRenameOutline" OnClick="RenameListAsync">
+                Rename @CurrentList?.Name
+            </MudMenuItem>
+            @* The last list can't go: the screen would have nowhere to put anything. *@
+            @if (Lists.Count > 1)
+            {
+                <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="DeleteListAsync">
+                    Delete @CurrentList?.Name
+                </MudMenuItem>
+            }
+        </MudMenu>
+    </div>
 
     @if (_sections.IsEmpty)
     {
@@ -81,6 +96,66 @@
     private Guid UserId => Auth.User?.Id ?? Guid.Empty;
 
     private List<TaskList> Lists => [.. TaskView.Lists(Store)];
+
+    private TaskList? CurrentList => Lists.FirstOrDefault(l => l.Id == Ui.TaskListId);
+
+    // Stands in for "+ New list…" in the picker. Never a real list id.
+    private static readonly Guid NewListChoice = Guid.Empty;
+
+    // MudSelect takes the picked value into its own state before asking this page. When
+    // the answer is "no change" — a new list cancelled — nothing pushes it back, and it
+    // goes on showing "+ New list…" over the list you're really on. A new key rebuilds it
+    // from the real selection.
+    private int _pickerVersion;
+
+    private async Task SelectListAsync(Guid listId)
+    {
+        if (listId == NewListChoice)
+        {
+            // Picking "+ New list…" doesn't switch lists; making one does, below.
+            await CreateListAsync();
+            _pickerVersion++;
+            return;
+        }
+        await Ui.SetTaskListAsync(listId);
+    }
+
+    private async Task CreateListAsync()
+    {
+        if (await Prompts.RenameAsync(Dialogs, "New task list", "") is { } name)
+        {
+            var list = await Actions.CreateListAsync(name);
+            // You just made it, so you're about to put something in it.
+            await Ui.SetTaskListAsync(list.Id);
+        }
+        StateHasChanged();
+    }
+
+    private async Task RenameListAsync()
+    {
+        if (CurrentList is { } list
+            && await Prompts.RenameAsync(Dialogs, "Rename list", list.Name) is { } name)
+        {
+            await Actions.RenameListAsync(list, name);
+        }
+    }
+
+    private async Task DeleteListAsync()
+    {
+        if (CurrentList is not { } list)
+        {
+            return;
+        }
+        var count = TaskView.Tasks(Store, list.Id).Count();
+        var confirmed = await Dialogs.ShowMessageBoxAsync($"Delete {list.Name}?",
+            count == 0 ? "The list is empty." : count == 1 ? "The task on it will go too." : $"{count} tasks on it will go too.",
+            yesText: "Delete", cancelText: "Cancel");
+        if (confirmed == true && await Actions.DeleteListAsync(list))
+        {
+            Ui.FallBackIfMissing();
+            await Ui.SetTaskListAsync(Ui.TaskListId);
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {

@@ -391,3 +391,8 @@ h1:focus {
     border-color: rgba(255, 255, 255, 0.12);
     color: var(--mud-palette-text-disabled);
 }
+
+/* "+ New list…" sits in the list picker but isn't a list, so it reads as an action. */
+.new-list-choice {
+    color: var(--mud-palette-primary);
+}
