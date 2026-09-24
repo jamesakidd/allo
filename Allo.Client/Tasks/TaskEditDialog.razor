@@ -2,6 +2,7 @@
 @using Allo.Shared.Models
 @using Allo.Shared.Sync
 @inject TaskActions Actions
+@inject LocalStore Store
 @inject IJSRuntime Js
 @inject TimeProvider Time
 
@@ -13,6 +14,19 @@
         <MudStack Spacing="3">
             <MudTextField @bind-Value="_title" Label="Task" Variant="Variant.Outlined"
                           Margin="Margin.Dense" AutoFocus="true" />
+
+            @* Only when there's somewhere else to put it. Moving is just a change to this
+               field, so it syncs like any other edit and keeps priority, date and done. *@
+            @if (Lists.Count > 1)
+            {
+                <MudSelect T="Guid" @bind-Value="_listId" Label="List" Variant="Variant.Outlined"
+                           Margin="Margin.Dense">
+                    @foreach (var list in Lists)
+                    {
+                        <MudSelectItem T="Guid" Value="@list.Id">@list.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
 
             <MudSelect T="Priority" @bind-Value="_priority" Label="Priority" Variant="Variant.Outlined"
                        Margin="Margin.Dense">
@@ -68,6 +82,7 @@
     [Parameter, EditorRequired] public TaskEntry Entry { get; set; } = null!;
 
     private MudDatePicker? _datePicker;
+    private Guid _listId;
     private string? _title;
     private Priority _priority;
     private DateTime? _dueOn;
@@ -77,6 +92,7 @@
     protected override void OnInitialized()
     {
         _title = Entry.Title;
+        _listId = Entry.TaskListId;
         _priority = Entry.Priority;
         _dueOn = Entry.DueOn?.ToDateTime(TimeOnly.MinValue);
         _note = Entry.Note;
@@ -91,7 +107,7 @@
         // Validate a copy, so the task on screen never briefly holds invalid values.
         var candidate = new TaskEntry
         {
-            Id = Entry.Id, TaskListId = Entry.TaskListId, Title = title,
+            Id = Entry.Id, TaskListId = _listId, Title = title,
             Priority = _priority, DueOn = DueOnly, Note = note,
         };
         if (SyncValidation.Validate(candidate) is { } error)
@@ -100,6 +116,7 @@
             return;
         }
 
+        Entry.TaskListId = _listId;
         Entry.Title = title;
         Entry.Priority = _priority;
         Entry.DueOn = DueOnly;
@@ -107,6 +124,8 @@
         await Actions.SaveAsync(Entry);
         Dialog.Close(DialogResult.Ok(true));
     }
+
+    private List<TaskList> Lists => [.. TaskView.Lists(Store)];
 
     // The picker deals in DateTime; only the date half is ever stored.
     private DateOnly? DueOnly => _dueOn is { } due ? DateOnly.FromDateTime(due) : null;

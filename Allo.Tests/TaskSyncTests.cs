@@ -191,5 +191,107 @@ public class TaskSyncTests : IDisposable
         Assert.Equal(list.Id, (await ServerTaskAsync(sam, task.Id)).TaskListId);
     }
 
+    private static async Task<TaskList> NewListAsync(HttpClient http, string name)
+    {
+        var list = new TaskList { Id = Guid.NewGuid(), Name = name };
+        await PushAsync(http, new SyncPushRequest { Rows = new SyncRows { TaskLists = [list] } });
+        return list;
+    }
+
+    private static async Task DeleteListOnlyAsync(HttpClient http, TaskList list)
+    {
+        // Just the list, as a phone would send it if it didn't know any tasks were on it.
+        list.IsDeleted = true;
+        await PushAsync(http, new SyncPushRequest { Rows = new SyncRows { TaskLists = [list] } });
+    }
+
+    [Fact]
+    public async Task MovingATask_KeepsEverythingElseAboutIt()
+    {
+        var sam = await _app.AddPhoneAsync(TestApp.AdminUsername);
+        var garden = await NewListAsync(sam.Http, "Garden");
+        var task = NewTask("prune the apple tree", Priority.High, new DateOnly(2026, 10, 1));
+        await PushTasksAsync(sam.Http, task);
+        await PushAsync(sam.Http, new SyncPushRequest { Dones = [new TaskDone(task.Id, true, DateTimeOffset.UtcNow)] });
+
+        var moved = await ServerTaskAsync(sam.Http, task.Id);
+        moved.TaskListId = garden.Id;
+        var response = await PushTasksAsync(sam.Http, moved);
+
+        Assert.Empty(response.Rejections);
+        var stored = await ServerTaskAsync(sam.Http, task.Id);
+        Assert.Equal(garden.Id, stored.TaskListId);
+        Assert.Equal(Priority.High, stored.Priority);
+        Assert.Equal(new DateOnly(2026, 10, 1), stored.DueOn);
+        Assert.True(stored.IsDone);
+    }
+
+    // The list is deleted first, then a move onto it arrives: refused, and the phone gets
+    // back the server's version so the task returns to where it was instead of vanishing.
+    [Fact]
+    public async Task MovingOntoAJustDeletedList_IsRefused_AndTheTaskStaysPut()
+    {
+        var sam = await _app.AddPhoneAsync(TestApp.AdminUsername);
+        var garden = await NewListAsync(sam.Http, "Garden");
+        var task = NewTask();
+        await PushTasksAsync(sam.Http, task);
+        await DeleteListOnlyAsync(sam.Http, garden);
+
+        var moved = await ServerTaskAsync(sam.Http, task.Id);
+        moved.TaskListId = garden.Id;
+        var response = await PushTasksAsync(sam.Http, moved);
+
+        Assert.Equal("That task list has been deleted.", Assert.Single(response.Rejections).Reason);
+        Assert.Equal(TaskList.DefaultId, Assert.Single(response.Current.Tasks).TaskListId);
+        Assert.Equal(TaskList.DefaultId, (await ServerTaskAsync(sam.Http, task.Id)).TaskListId);
+    }
+
+    [Fact]
+    public async Task AddingToADeletedList_IsRefused()
+    {
+        var sam = await _app.AddPhoneAsync(TestApp.AdminUsername);
+        var garden = await NewListAsync(sam.Http, "Garden");
+        await DeleteListOnlyAsync(sam.Http, garden);
+        var task = NewTask();
+        task.TaskListId = garden.Id;
+
+        var response = await PushTasksAsync(sam.Http, task);
+
+        Assert.Equal("That task list has been deleted.", Assert.Single(response.Rejections).Reason);
+    }
+
+    // The other order: the move lands first, then a phone that never saw it deletes the
+    // list. That phone's delete only names the tasks it knew about, so the server retires
+    // the rest — otherwise the moved task would sit on a deleted list, stored and never shown.
+    [Fact]
+    public async Task DeletingAList_RetiresATaskAnotherPhoneJustMovedOntoIt()
+    {
+        var sam = await _app.AddPhoneAsync(TestApp.AdminUsername);
+        var alex = await _app.AddPhoneAsync("alex");
+        var garden = await NewListAsync(sam.Http, "Garden");
+        var task = NewTask("prune the apple tree");
+        await PushTasksAsync(alex.Http, task);
+
+        var moved = await ServerTaskAsync(alex.Http, task.Id);
+        moved.TaskListId = garden.Id;
+        await PushTasksAsync(alex.Http, moved);
+        await DeleteListOnlyAsync(sam.Http, garden);
+
+        Assert.True((await ServerTaskAsync(sam.Http, task.Id)).IsDeleted);
+    }
+
+    [Fact]
+    public async Task DeletingAList_LeavesOtherListsTasksAlone()
+    {
+        var sam = await _app.AddPhoneAsync(TestApp.AdminUsername);
+        var garden = await NewListAsync(sam.Http, "Garden");
+        var keep = NewTask("still on Tasks");
+        await PushTasksAsync(sam.Http, keep);
+
+        await DeleteListOnlyAsync(sam.Http, garden);
+
+        Assert.False((await ServerTaskAsync(sam.Http, keep.Id)).IsDeleted);
+    }
+
     public void Dispose() => _app.Dispose();
 }

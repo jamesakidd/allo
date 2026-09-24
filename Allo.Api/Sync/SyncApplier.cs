@@ -62,6 +62,9 @@ public sealed class SyncApplier(AppDbContext db, Guid userId)
                     t.AddedBy = userId;
                     t.DoneBy = t.IsDone ? userId : null;
                 });
+            // After this push's own task changes, so a task moved off a list in the same push
+            // has already left before the list's remaining tasks are retired.
+            await RetireTasksOnDeletedListsAsync(request.Rows.TaskLists.Where(l => l.IsDeleted).Select(l => l.Id));
             await ApplyChecksAsync(request.Checks);
             await ApplyDonesAsync(request.Dones);
             await transaction.CommitAsync();
@@ -128,6 +131,27 @@ public sealed class SyncApplier(AppDbContext db, Guid userId)
             entry.CheckedAt = check.CheckedAt;
             entry.CheckedBy = userId;
             await SaveOrRejectAsync(SyncTable.ListEntry, check.EntryId.ToString());
+        }
+    }
+
+    // Deleting a list takes its tasks with it. The phone doing the delete tombstones the
+    // tasks it knows about, but a task moved or added onto that list by another phone a
+    // moment earlier isn't one of them. Without this it would be left on a deleted list:
+    // stored everywhere, shown nowhere. Only lists this push actually deleted are touched.
+    private async Task RetireTasksOnDeletedListsAsync(IEnumerable<Guid> listIds)
+    {
+        var ids = listIds.ToList();
+        if (ids.Count == 0)
+        {
+            return;
+        }
+        var deleted = await db.TaskLists.Where(l => ids.Contains(l.Id) && l.IsDeleted).Select(l => l.Id).ToListAsync();
+        var stranded = await db.TaskEntries.Where(t => deleted.Contains(t.TaskListId) && !t.IsDeleted).ToListAsync();
+        foreach (var task in stranded)
+        {
+            task.IsDeleted = true;
+            task.UpdatedBy = userId;
+            await SaveOrRejectAsync(SyncTable.TaskEntry, task.Id.ToString());
         }
     }
 
@@ -226,10 +250,17 @@ public sealed class SyncApplier(AppDbContext db, Guid userId)
             : null;
     }
 
+    // A deleted list is refused as firmly as a missing one. Moving onto a list another phone
+    // has just deleted is rejected, and the server's version — still on its old list — goes
+    // back to the phone, so the task stays where it was rather than vanishing.
     private async Task<string?> CheckAsync(TaskEntry task) =>
         SyncValidation.Validate(task) is { } error ? error
-        : await db.TaskLists.FindAsync(task.TaskListId) is null ? "Unknown task list."
-        : null;
+        : await db.TaskLists.FindAsync(task.TaskListId) switch
+        {
+            null => "Unknown task list.",
+            { IsDeleted: true } => "That task list has been deleted.",
+            _ => null,
+        };
 
     private static void CopyItem(Item to, Item from)
     {

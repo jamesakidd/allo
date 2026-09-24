@@ -26,6 +26,20 @@ public sealed class TaskActions(LocalStore store, TimeProvider time)
 
     public Task SaveAsync(TaskEntry task) => store.SaveAsync(task);
 
+    // Moves a task to another of this device's lists, keeping everything else about it —
+    // priority, due date, done or not. False when the target isn't a live list here, which
+    // is what Undo hits if the original list was deleted in the meantime.
+    public async Task<bool> MoveAsync(TaskEntry task, Guid taskListId)
+    {
+        if (task.TaskListId == taskListId || !TaskView.Lists(store).Any(l => l.Id == taskListId))
+        {
+            return false;
+        }
+        task.TaskListId = taskListId;
+        await store.SaveAsync(task);
+        return true;
+    }
+
     public Task SetDoneAsync(TaskEntry task, bool isDone, Guid userId) =>
         store.SetDoneAsync(task.Id, isDone, userId);
 

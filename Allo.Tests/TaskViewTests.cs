@@ -172,6 +172,45 @@ public class TaskViewTests
     }
 
     [Fact]
+    public async Task MovingATask_TakesItOffOneListAndOntoTheOther()
+    {
+        var garden = await _actions.CreateListAsync("Garden");
+        var task = await AddAsync("prune the apple tree", Priority.High);
+
+        Assert.True(await _actions.MoveAsync(task, garden.Id));
+
+        Assert.True(Build().IsEmpty);
+        var there = Assert.Single(TaskView.Build(_store, garden.Id, Today).ToDo);
+        Assert.Equal(Priority.High, there.Priority);
+        Assert.Equal("prune the apple tree", there.Tasks.Single().Title);
+    }
+
+    // What Undo does: move it straight back.
+    [Fact]
+    public async Task MovingItBack_PutsItWhereItWas()
+    {
+        var garden = await _actions.CreateListAsync("Garden");
+        var task = await AddAsync("prune the apple tree");
+        await _actions.MoveAsync(task, garden.Id);
+
+        Assert.True(await _actions.MoveAsync(task, TaskList.DefaultId));
+
+        Assert.Equal("prune the apple tree", Assert.Single(Build().ToDo).Tasks.Single().Title);
+    }
+
+    // Undo after the original list was deleted elsewhere must not resurrect it as a target.
+    [Fact]
+    public async Task MovingOntoAListThatIsGone_DoesNothing()
+    {
+        var garden = await _actions.CreateListAsync("Garden");
+        var task = await AddAsync("prune the apple tree");
+        await _actions.DeleteListAsync(garden);
+
+        Assert.False(await _actions.MoveAsync(task, garden.Id));
+        Assert.Equal(TaskList.DefaultId, task.TaskListId);
+    }
+
+    [Fact]
     public async Task TheLastListCannotBeDeleted()
     {
         var only = TaskView.Lists(_store).Single();

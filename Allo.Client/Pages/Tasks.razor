@@ -8,6 +8,7 @@
 @inject UiState Ui
 @inject AlloAuthStateProvider Auth
 @inject IDialogService Dialogs
+@inject ISnackbar Snackbar
 
 <PageTitle>allo · tasks</PageTitle>
 
@@ -183,12 +184,37 @@
 
     private async Task EditAsync(TaskEntry task)
     {
+        var from = task.TaskListId;
         var parameters = new DialogParameters<TaskEditDialog> { { x => x.Entry, task } };
-        await Dialogs.ShowAsync<TaskEditDialog>(null, parameters, new DialogOptions
+        var dialog = await Dialogs.ShowAsync<TaskEditDialog>(null, parameters, new DialogOptions
         {
             FullWidth = true, MaxWidth = MaxWidth.ExtraSmall, CloseOnEscapeKey = true,
             BackdropClick = false,
         });
+        await dialog.Result;
+
+        // A task moved to another list leaves this screen, which looks exactly like it was
+        // deleted. Say where it went, and offer the way back.
+        if (!task.IsDeleted && task.TaskListId != from)
+        {
+            var to = Lists.FirstOrDefault(l => l.Id == task.TaskListId)?.Name ?? "another list";
+            Snackbar.Add($"Moved to {to}", Severity.Normal, options =>
+            {
+                options.Action = "Undo";
+                options.ActionColor = Color.Primary;
+                options.OnClick = _ => UndoMoveAsync(task.Id, from);
+            });
+        }
+    }
+
+    // By id rather than the object the sheet edited: a sync in the meantime replaces the
+    // device's copy, and the move-back should apply to the current one.
+    private async Task UndoMoveAsync(Guid taskId, Guid listId)
+    {
+        if (Store.Tasks.FirstOrDefault(t => t.Id == taskId && !t.IsDeleted) is { } task)
+        {
+            await Actions.MoveAsync(task, listId);
+        }
     }
 
     private async Task ClearDoneAsync() => await Actions.ClearDoneAsync(Ui.TaskListId);

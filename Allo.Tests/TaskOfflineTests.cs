@@ -128,5 +128,37 @@ public class TaskOfflineTests : IDisposable
         Assert.Equal("renew the insurance", Task(alex, task.Id).Title);
     }
 
+    // Moving is a content change and ticking off is the done group, so they never collide.
+    [Fact]
+    public async Task AirplaneMode_MoveAndComplete_BothSurvive()
+    {
+        var (sam, alex) = await TwoSyncedPhonesAsync();
+        var garden = new TaskList { Id = Guid.NewGuid(), Name = "Garden" };
+        await sam.Store.SaveAsync(garden);
+        var task = await AddTaskAsync(sam, "prune the apple tree");
+        await sam.SyncAsync();
+        await alex.SyncAsync();
+
+        sam.Network.Offline = true;
+        var samTask = Task(sam, task.Id);
+        samTask.TaskListId = garden.Id;
+        await sam.Store.SaveAsync(samTask);
+        await sam.SyncAsync();
+
+        await alex.Store.SetDoneAsync(task.Id, true, alex.UserId);
+        await alex.SyncAsync();
+
+        sam.Network.Offline = false;
+        await sam.SyncAsync();
+        await alex.SyncAsync();
+
+        foreach (var phone in new[] { sam, alex })
+        {
+            Assert.Equal(garden.Id, Task(phone, task.Id).TaskListId);
+            Assert.True(Task(phone, task.Id).IsDone);
+            Assert.Equal(0, phone.Store.PendingCount);
+        }
+    }
+
     public void Dispose() => _app.Dispose();
 }
