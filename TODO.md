@@ -235,6 +235,7 @@ not.
   - Stored as the string code like `Unit`, never the integer, so the data stays readable and adding a level later never renumbers existing rows
   - Sorted by an explicit rank, not by enum order, since the stored value is a string
   - Priority is to tasks what category is to groceries: the thing that groups and orders the screen
+  - **Priority always outranks the due date, confirmed in use (2026-09-24) by the person who asked for the feature:** *"Fires get put out and leaky buckets get plugged, regardless of previous assigned dates."* So a low-priority task overdue by a week still sorts below a high-priority one due next year. This was a genuine fork — sorting by date first is defensible and plenty of task apps do it — so treat it as decided, not as an oversight to fix
 - [x] `DueOn` as a **date, not a timestamp** (`DateOnly?`)
   - The app stores UTC. An evening due-time in UTC displays as the previous day depending on where you are, and a household task has no business carrying a timezone. A date also maps cleanly to an all-day calendar event
   - Overdue rows get a red pill, today's a green one, anything further out is plain — a date earns colour only when it matters
