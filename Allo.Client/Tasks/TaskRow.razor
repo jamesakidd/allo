@@ -1,0 +1,36 @@
+@using Allo.Shared.Lists
+@using Allo.Shared.Models
+
+@* Same shape as EntryRow: the whole row opens the editor, the checkbox keeps its own
+   generous tap area. Priority isn't shown here — it's the group header above. *@
+<div class="entry-row @(Entry.IsDone ? "entry-checked" : "")">
+    <MudCheckBox T="bool" Value="Entry.IsDone" ValueChanged="@(v => OnToggle.InvokeAsync(v))"
+                 Color="Color.Primary" Size="Size.Large" Dense="false"
+                 aria-label="@($"Mark {Entry.Title} done")" />
+    <div class="entry-body" @onclick="@(() => OnEdit.InvokeAsync())">
+        <div class="entry-name">
+            <MudText Typo="Typo.body1">@Entry.Title</MudText>
+            @if (Due is { Length: > 0 })
+            {
+                <span class="due-pill @(Overdue ? "due-overdue" : DueToday ? "due-today" : "")">@Due</span>
+            }
+        </div>
+        @if (!string.IsNullOrWhiteSpace(Entry.Note))
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">@Entry.Note</MudText>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public TaskEntry Entry { get; set; } = null!;
+    [Parameter, EditorRequired] public DateOnly Today { get; set; }
+    [Parameter] public EventCallback<bool> OnToggle { get; set; }
+    [Parameter] public EventCallback OnEdit { get; set; }
+
+    private string? Due => TaskView.DueLabel(Entry, Today);
+
+    private bool Overdue => TaskView.IsOverdue(Entry, Today);
+
+    private bool DueToday => TaskView.IsDueToday(Entry, Today);
+}

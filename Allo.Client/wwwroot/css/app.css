@@ -361,3 +361,33 @@ h1:focus {
 .tag-suggestion {
     cursor: pointer;
 }
+
+/* ---- Tasks ---- */
+
+/* A due date reads as plain text until it matters, then it earns colour: today is worth
+   noticing, overdue is worth acting on, anything further out is just information. */
+.due-pill {
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.72rem;
+    line-height: 1;
+    padding: 0.2rem 0.5rem;
+    white-space: nowrap;
+}
+
+.due-pill.due-today {
+    border-color: var(--mud-palette-primary);
+    color: var(--mud-palette-primary);
+}
+
+.due-pill.due-overdue {
+    border-color: var(--mud-palette-error);
+    color: var(--mud-palette-error);
+}
+
+/* A finished task's date stops shouting. */
+.entry-checked .due-pill {
+    border-color: rgba(255, 255, 255, 0.12);
+    color: var(--mud-palette-text-disabled);
+}

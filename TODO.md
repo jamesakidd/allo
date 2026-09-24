@@ -237,17 +237,17 @@ not.
   - Priority is to tasks what category is to groceries: the thing that groups and orders the screen
 - [x] `DueOn` as a **date, not a timestamp** (`DateOnly?`)
   - The app stores UTC. An evening due-time in UTC displays as the previous day depending on where you are, and a household task has no business carrying a timezone. A date also maps cleanly to an all-day calendar event
-  - Overdue rows get a visual treatment; sorting folds the date in under priority (screen work, not yet built)
+  - Overdue rows get a red pill, today's a green one, anything further out is plain — a date earns colour only when it matters
   - Verified in the database: a task stores `high 2026-10-01` — the priority code, and a date with no time and no offset, so nothing can shift a due date across midnight
-- [ ] Several task lists from the start (House, Garden, Errands…), with a selector like the store picker — the model and sync already carry a list id and a new list plus its tasks can arrive in one push; what's left is the UI
-- [ ] Tasks screen: its own sidebar entry, grouped by priority, with a "Done" section at the bottom reusing the In-the-cart pattern
-- [ ] Reuse the add bar: type a title, press enter, keep typing. Priority and due date are set in an edit sheet, not in the add flow — adding must stay one gesture
+- [x] Several task lists from the start (House, Garden, Errands…), with a selector like the store picker. The selector only appears when there is more than one list, same as the shopping list's. Creating and renaming lists is in `TaskActions`; the last list cannot be deleted, since the screen would have nowhere to put anything
+- [x] Tasks screen: its own sidebar entry, grouped by priority, with a "Done" section at the bottom reusing the In-the-cart pattern
+- [x] Reuse the add bar: type a title, press enter, keep typing. Priority and due date are set in an edit sheet, not in the add flow — adding stays one gesture, with a "set priority or date" shortcut on the last thing added
 - [ ] **Stretch: add to calendar.** When a task has a due date, offer a button that hands the phone a generated `.ics` file
   - Generated on the device, so it works offline and does not assume anyone's calendar provider. Not a Google Calendar link, which needs a network and assumes Google
   - An all-day `VEVENT` from `DueOn`, titled from the task
   - **Check against the CSP first.** `default-src 'self'` is deliberately strict and may block handing the browser a generated file; find that on the bench, not after a release
 - [x] Guardrail: a task list query never returns a shopping list and vice versa, and a task cannot be parked on a shopping list id (`TaskSyncTests`). Also covered: deletes final, done-group independence, who-ticked-it from the login not the payload, and the offline paths in `TaskOfflineTests`
-- [ ] Remaining guardrails, once the screen exists: priority must group without affecting order inside a group; a task with no due date must never appear overdue
+- [x] Guardrails now the screen exists (`TaskViewTests`): a due date never outranks priority, inside a group the soonest due leads and undated sorts last, a task with no due date is never overdue and neither is a finished one, and the due wording ("Today", "Tomorrow", "Overdue · Sep 19") is pinned
 
 **Deliberately not in scope**, so the screen stays a task list rather than a project manager:
 

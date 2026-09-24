@@ -1,0 +1,126 @@
+@page "/tasks"
+@using Allo.Shared.Lists
+@using Allo.Shared.Models
+@using Allo.Shared.Sync
+@implements IDisposable
+@inject LocalStore Store
+@inject TaskActions Actions
+@inject UiState Ui
+@inject AlloAuthStateProvider Auth
+@inject IDialogService Dialogs
+
+<PageTitle>allo · tasks</PageTitle>
+
+<div class="list-page">
+    @if (Lists.Count > 1)
+    {
+        <div class="list-selectors">
+            <MudSelect T="Guid" Value="Ui.TaskListId" ValueChanged="Ui.SetTaskListAsync" Dense="true"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Label="List">
+                @foreach (var list in Lists)
+                {
+                    <MudSelectItem T="Guid" Value="@list.Id">@list.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </div>
+    }
+
+    @if (_sections.IsEmpty)
+    {
+        <MudStack Spacing="1" AlignItems="AlignItems.Center" Class="empty-state">
+            <MudIcon Icon="@Icons.Material.Outlined.TaskAlt" Size="Size.Large" Color="Color.Primary" />
+            <MudText Typo="Typo.subtitle1">Nothing to do</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Add your first task below.</MudText>
+        </MudStack>
+    }
+    else
+    {
+        @foreach (var group in _sections.ToDo)
+        {
+            <div class="category-header">
+                <MudText Typo="Typo.overline">@group.Priority.Label()</MudText>
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">@group.Tasks.Count</MudText>
+            </div>
+            @foreach (var task in group.Tasks)
+            {
+                <TaskRow @key="task.Id" Entry="task" Today="_today"
+                         OnToggle="@(done => ToggleAsync(task, done))"
+                         OnEdit="@(() => EditAsync(task))" />
+            }
+        }
+
+        @* Done: out of the way at the bottom, still reviewable, one tap puts it back. *@
+        @if (_sections.DoneCount > 0)
+        {
+            <div class="checked-section">
+                <div class="checked-header">
+                    <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">
+                        Done · @_sections.DoneCount
+                    </MudText>
+                    <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Default"
+                               Style="text-transform: none;" StartIcon="@Icons.Material.Filled.ClearAll"
+                               OnClick="ClearDoneAsync">Clear</MudButton>
+                </div>
+                @foreach (var task in _sections.Done)
+                {
+                    <TaskRow @key="task.Id" Entry="task" Today="_today"
+                             OnToggle="@(done => ToggleAsync(task, done))"
+                             OnEdit="@(() => EditAsync(task))" />
+                }
+            </div>
+        }
+    }
+</div>
+
+<TaskAddBar TaskListId="Ui.TaskListId" UserId="UserId" OnEditLast="EditAsync" />
+
+@code {
+    private TaskSections _sections = new([], []);
+    private DateOnly _today = DateOnly.FromDateTime(DateTime.Now);
+
+    private Guid UserId => Auth.User?.Id ?? Guid.Empty;
+
+    private List<TaskList> Lists => [.. TaskView.Lists(Store)];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Store.Changed += Refresh;
+        Ui.Changed += Refresh;
+        await Ui.LoadAsync();
+        Rebuild();
+    }
+
+    private void Refresh() => InvokeAsync(() =>
+    {
+        Rebuild();
+        StateHasChanged();
+    });
+
+    private void Rebuild()
+    {
+        Ui.FallBackIfMissing();
+        // Local date, not UTC: "today" has to mean the day the person is actually having.
+        _today = DateOnly.FromDateTime(DateTime.Now);
+        _sections = TaskView.Build(Store, Ui.TaskListId, _today);
+    }
+
+    private Task ToggleAsync(TaskEntry task, bool isDone) => Actions.SetDoneAsync(task, isDone, UserId);
+
+    private async Task EditAsync(TaskEntry task)
+    {
+        var parameters = new DialogParameters<TaskEditDialog> { { x => x.Entry, task } };
+        await Dialogs.ShowAsync<TaskEditDialog>(null, parameters, new DialogOptions
+        {
+            FullWidth = true, MaxWidth = MaxWidth.ExtraSmall, CloseOnEscapeKey = true,
+            BackdropClick = false,
+        });
+    }
+
+    private async Task ClearDoneAsync() => await Actions.ClearDoneAsync(Ui.TaskListId);
+
+    public void Dispose()
+    {
+        Store.Changed -= Refresh;
+        Ui.Changed -= Refresh;
+    }
+}

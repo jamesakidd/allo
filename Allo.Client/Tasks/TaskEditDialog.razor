@@ -1,0 +1,109 @@
+@using Allo.Shared.Lists
+@using Allo.Shared.Models
+@using Allo.Shared.Sync
+@inject TaskActions Actions
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Task</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_title" Label="Task" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" AutoFocus="true" />
+
+            <MudSelect T="Priority" @bind-Value="_priority" Label="Priority" Variant="Variant.Outlined"
+                       Margin="Margin.Dense">
+                @foreach (var priority in Priorities.All)
+                {
+                    <MudSelectItem T="Priority" Value="@priority">@priority.Label()</MudSelectItem>
+                }
+            </MudSelect>
+
+            @* A date with no time. Everything else here is stored UTC, and a due time would
+               land on the wrong day depending on where you are. *@
+            @* Inline so it renders at the popover root rather than inside this dialog's
+               content box, which clips it — the same trap the store colour picker hit. The
+               Done button matters too: without it the only way out is tapping the sliver of
+               dialog behind, and missing closes the whole edit sheet. *@
+            <MudDatePicker @ref="_datePicker" @bind-Date="_dueOn" Label="Due" Variant="Variant.Outlined"
+                           Margin="Margin.Dense" Clearable="true" Editable="true"
+                           PickerVariant="PickerVariant.Inline" DateFormat="ddd d MMM yyyy">
+                <PickerActions>
+                    <MudButton OnClick="@(() => _dueOn = null)">Clear</MudButton>
+                    <MudSpacer />
+                    <MudButton Color="Color.Primary" OnClick="CloseDatePickerAsync">Done</MudButton>
+                </PickerActions>
+            </MudDatePicker>
+
+            <MudTextField @bind-Value="_note" Label="Note" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Lines="2" />
+
+            @if (_error is { Length: > 0 })
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@_error</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="RemoveAsync">Remove</MudButton>
+        <MudSpacer />
+        <MudButton OnClick="@(() => Dialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public IMudDialogInstance Dialog { get; set; } = null!;
+    [Parameter, EditorRequired] public TaskEntry Entry { get; set; } = null!;
+
+    private MudDatePicker? _datePicker;
+    private string? _title;
+    private Priority _priority;
+    private DateTime? _dueOn;
+    private string? _note;
+    private string? _error;
+
+    protected override void OnInitialized()
+    {
+        _title = Entry.Title;
+        _priority = Entry.Priority;
+        _dueOn = Entry.DueOn?.ToDateTime(TimeOnly.MinValue);
+        _note = Entry.Note;
+    }
+
+    private Task CloseDatePickerAsync() => _datePicker?.CloseAsync() ?? Task.CompletedTask;
+
+    private async Task SaveAsync()
+    {
+        var title = (_title ?? "").Trim();
+        var note = string.IsNullOrWhiteSpace(_note) ? null : _note.Trim();
+        // Validate a copy, so the task on screen never briefly holds invalid values.
+        var candidate = new TaskEntry
+        {
+            Id = Entry.Id, TaskListId = Entry.TaskListId, Title = title,
+            Priority = _priority, DueOn = DueOnly, Note = note,
+        };
+        if (SyncValidation.Validate(candidate) is { } error)
+        {
+            _error = error;
+            return;
+        }
+
+        Entry.Title = title;
+        Entry.Priority = _priority;
+        Entry.DueOn = DueOnly;
+        Entry.Note = note;
+        await Actions.SaveAsync(Entry);
+        Dialog.Close(DialogResult.Ok(true));
+    }
+
+    // The picker deals in DateTime; only the date half is ever stored.
+    private DateOnly? DueOnly => _dueOn is { } due ? DateOnly.FromDateTime(due) : null;
+
+    private async Task RemoveAsync()
+    {
+        await Actions.DeleteAsync(Entry);
+        Dialog.Close(DialogResult.Ok(true));
+    }
+}

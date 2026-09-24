@@ -37,6 +37,7 @@ builder.Services.AddSingleton<LocalStore>();
 builder.Services.AddSingleton<ISyncTransport, HttpSyncTransport>();
 builder.Services.AddSingleton<SyncEngine>();
 builder.Services.AddSingleton<ListActions>();
+builder.Services.AddSingleton<TaskActions>();
 builder.Services.AddSingleton<UiState>();
 builder.Services.AddScoped<SyncCoordinator>();
 

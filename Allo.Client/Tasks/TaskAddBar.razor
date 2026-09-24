@@ -1,0 +1,58 @@
+@using Allo.Shared.Lists
+@using Allo.Shared.Models
+@inject TaskActions Actions
+
+@* Deliberately plainer than the shopping add bar: a title and enter. Priority and due
+   date live in the edit sheet, so adding a task stays one gesture. *@
+<div class="add-bar">
+    @if (_lastAdded is not null)
+    {
+        <div class="add-feedback">
+            <MudText Typo="Typo.caption">Added @_lastAdded.Title</MudText>
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                       Style="text-transform: none;" OnClick="@(() => OnEditLast.InvokeAsync(_lastAdded))">
+                Set priority or date
+            </MudButton>
+        </div>
+    }
+    <div class="add-input">
+        <MudTextField @ref="_input" @bind-Value="_text" Immediate="true" Variant="Variant.Outlined"
+                      Margin="Margin.Dense" Placeholder="Add a task" OnKeyDown="OnKeyDown"
+                      autocomplete="off" />
+        <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                       Size="Size.Medium" OnClick="@(() => AddAsync(_text))" aria-label="Add" />
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid TaskListId { get; set; }
+    [Parameter, EditorRequired] public Guid UserId { get; set; }
+    [Parameter] public EventCallback<TaskEntry> OnEditLast { get; set; }
+
+    private MudTextField<string>? _input;
+    private string _text = "";
+    private TaskEntry? _lastAdded;
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or "NumpadEnter")
+        {
+            await AddAsync(_text);
+        }
+    }
+
+    private async Task AddAsync(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+        _lastAdded = await Actions.AddAsync(text, TaskListId, UserId);
+        _text = "";
+        // Keep the keyboard up for the next one.
+        if (_input is not null)
+        {
+            await _input.FocusAsync();
+        }
+    }
+}
