@@ -79,7 +79,7 @@ services:
       Admin__Username: you
       Admin__InitialPassword: change-this-at-first-login
       Admin__DisplayName: You
-      ForwardedHeaders__KnownProxies__0: 192.168.1.176
+      ForwardedHeaders__KnownProxies__0: 10.0.0.2   # your reverse proxy's address
     restart: unless-stopped
 ```
 
