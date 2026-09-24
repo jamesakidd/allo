@@ -11,6 +11,12 @@ relevant section rather than doing it silently.
 **What it is:** a shopping list PWA for family use, replacing Flipp. Self-hosted on
 Unraid. No flyers, no deals, no scraping. The entire value is fast entry, user-owned
 categorization, and sync that actually works on bad signal.
+
+**Scope grew once, deliberately (2026-09-24):** a household task list on a separate screen
+(see Tasks). The offline sync engine is the expensive part of this app and it is generic, so
+a second kind of list is mostly UI. The rule that keeps this from becoming bloat: tasks get
+their own screen, their own tables and their own sort rules, and **nothing about them may
+appear on the grocery list screen**.
 Sync cursors are server sequence numbers, never timestamps. Client clocks are not trusted for conflict resolution.
 
 **The constraint that drives everything:** grocery stores have dead spots. The app must
@@ -204,6 +210,48 @@ every change) so it's testable without a browser; the Razor pages are a thin she
 - [x] Visual treatment on the list row (small chips, not full-width, must not crowd the item name): under the name, muted, below the store pill
 - [x] Filter the list by tag: a chip row under the selectors, only when something on the list is tagged. Filters both the live list and the cart
 - [x] Guardrail: tags must never affect sort order (covered by a test)
+
+## Tasks
+
+A household task list, separate from the groceries. Asked for 2026-09-24. Priorities were
+the headline ask; due dates came with it, and a way to push a due date into the phone's own
+calendar is a stretch goal.
+
+**Its own tables, not a `Kind` flag on `ShoppingList`.** A shopping list and a task list
+share only an id and a name — different screens, different selectors, different sort rules.
+A discriminator would mean every existing list query has to remember to filter, which is the
+same class of bug as a tenancy leak, just smaller. Two plain tables need no filtering
+anywhere. Same reasoning rules out reusing `ListEntry`: it requires an `ItemId` into the
+catalog and a `CategoryId` that drives sort order, and a task has neither. Making those
+nullable would weaken the invariants the matcher and the category sort depend on, and minting
+a fake catalog item per task would pollute the catalog that learns categories and the
+autocomplete that ranks by use count. "milk" belongs in that catalog; "call the plumber" does
+not.
+
+- [ ] `TaskList` (id, name) and `TaskEntry` (id, taskListId, title, priority, dueOn, note, addedBy, isDone, doneAt, doneBy), both `SyncEntity`
+  - Two field groups, mirroring `ListEntry` exactly so conflict resolution is the existing logic: content (title, priority, dueOn, note, list) under `UpdatedAt`/`UpdatedBy`, done-state (`IsDone`) under `DoneAt`/`DoneBy`. Reprioritising while someone else ticks it off keeps both changes
+  - `Title` is free text, not a catalog lookup. No learning, no autocomplete, no normalization beyond trimming
+- [ ] `Priority` enum in `Allo.Shared`: `high`, `normal`, `low`, defaulting to `normal`
+  - Stored as the string code like `Unit`, never the integer, so the data stays readable and adding a level later never renumbers existing rows
+  - Sorted by an explicit rank, not by enum order, since the stored value is a string
+  - Priority is to tasks what category is to groceries: the thing that groups and orders the screen
+- [ ] `DueOn` as a **date, not a timestamp** (`DateOnly?`)
+  - The app stores UTC. An evening due-time in UTC displays as the previous day depending on where you are, and a household task has no business carrying a timezone. A date also maps cleanly to an all-day calendar event
+  - Overdue rows get a visual treatment; sorting folds the date in under priority
+- [ ] Several task lists from the start (House, Garden, Errands…), with a selector like the store picker
+- [ ] Tasks screen: its own sidebar entry, grouped by priority, with a "Done" section at the bottom reusing the In-the-cart pattern
+- [ ] Reuse the add bar: type a title, press enter, keep typing. Priority and due date are set in an edit sheet, not in the add flow — adding must stay one gesture
+- [ ] **Stretch: add to calendar.** When a task has a due date, offer a button that hands the phone a generated `.ics` file
+  - Generated on the device, so it works offline and does not assume anyone's calendar provider. Not a Google Calendar link, which needs a network and assumes Google
+  - An all-day `VEVENT` from `DueOn`, titled from the task
+  - **Check against the CSP first.** `default-src 'self'` is deliberately strict and may block handing the browser a generated file; find that on the bench, not after a release
+- [ ] Guardrail tests: a task list query must never return a shopping list (and vice versa); priority must group without affecting what is inside a group; a task with no due date must never appear overdue
+
+**Deliberately not in scope**, so the screen stays a task list rather than a project manager:
+
+- Assignment to a family member. Tasks already record who added and who completed, same as grocery entries — start there and see if explicit assignment is actually missed
+- Reminders or push notifications. Web Push needs VAPID keys, a push service, service-worker push handlers and permission prompts, with unreliable iOS support. The calendar export covers "tell me later" at a fraction of the cost
+- Recurring tasks, subtasks, dependencies
 
 ## Offline & Sync
 
