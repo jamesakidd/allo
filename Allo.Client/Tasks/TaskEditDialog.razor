@@ -2,6 +2,8 @@
 @using Allo.Shared.Models
 @using Allo.Shared.Sync
 @inject TaskActions Actions
+@inject IJSRuntime Js
+@inject TimeProvider Time
 
 <MudDialog>
     <TitleContent>
@@ -38,6 +40,14 @@
 
             <MudTextField @bind-Value="_note" Label="Note" Variant="Variant.Outlined" Margin="Margin.Dense"
                           Lines="2" />
+
+            @* Only offered once there is a date to put in a calendar. *@
+            @if (DueOnly is not null)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Default" FullWidth="true"
+                           StartIcon="@Icons.Material.Filled.EventAvailable" Style="text-transform: none;"
+                           OnClick="AddToCalendarAsync">Add to calendar</MudButton>
+            }
 
             @if (_error is { Length: > 0 })
             {
@@ -100,6 +110,21 @@
 
     // The picker deals in DateTime; only the date half is ever stored.
     private DateOnly? DueOnly => _dueOn is { } due ? DateOnly.FromDateTime(due) : null;
+
+    // Generated on the device and handed straight to the browser: no network, and no
+    // assumption about whose calendar the phone keeps.
+    private async Task AddToCalendarAsync()
+    {
+        var candidate = new TaskEntry
+        {
+            Id = Entry.Id, Title = (_title ?? Entry.Title).Trim(), DueOn = DueOnly,
+            Note = string.IsNullOrWhiteSpace(_note) ? null : _note.Trim(),
+        };
+        if (TaskCalendar.Build(candidate, Time.GetUtcNow()) is { } ics)
+        {
+            await Js.InvokeVoidAsync("alloDownload.file", TaskCalendar.FileName(candidate), "text/calendar", ics);
+        }
+    }
 
     private async Task RemoveAsync()
     {

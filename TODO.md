@@ -242,10 +242,12 @@ not.
 - [x] Several task lists from the start (House, Garden, Errands…), with a selector like the store picker. The selector only appears when there is more than one list, same as the shopping list's. Creating and renaming lists is in `TaskActions`; the last list cannot be deleted, since the screen would have nowhere to put anything
 - [x] Tasks screen: its own sidebar entry, grouped by priority, with a "Done" section at the bottom reusing the In-the-cart pattern
 - [x] Reuse the add bar: type a title, press enter, keep typing. Priority and due date are set in an edit sheet, not in the add flow — adding stays one gesture, with a "set priority or date" shortcut on the last thing added
-- [ ] **Stretch: add to calendar.** When a task has a due date, offer a button that hands the phone a generated `.ics` file
-  - Generated on the device, so it works offline and does not assume anyone's calendar provider. Not a Google Calendar link, which needs a network and assumes Google
-  - An all-day `VEVENT` from `DueOn`, titled from the task
-  - **Check against the CSP first.** `default-src 'self'` is deliberately strict and may block handing the browser a generated file; find that on the bench, not after a release
+- [x] **Add to calendar.** A task with a due date offers a button that hands the phone a generated `.ics`
+  - Generated on the device, so it works offline and assumes nothing about anyone's calendar provider. Not a Google Calendar link, which needs a network and assumes Google
+  - An all-day `VEVENT`. `DTEND` is **exclusive** in iCalendar, so a one-day event ends the following day — off by one and the task lands on the wrong date
+  - The `UID` is keyed on the task, so adding the same task twice updates the event rather than making a second one in calendars that honour it
+  - Delimiters in a title are escaped and long lines folded at 75 octets on character boundaries, because a malformed `.ics` fails silently in a calendar app rather than complaining
+  - **The CSP turned out to allow it.** A `blob:` download under `default-src 'self'` raised no violation, verified in a browser, so no policy change was needed
 - [x] Guardrail: a task list query never returns a shopping list and vice versa, and a task cannot be parked on a shopping list id (`TaskSyncTests`). Also covered: deletes final, done-group independence, who-ticked-it from the login not the payload, and the offline paths in `TaskOfflineTests`
 - [x] Guardrails now the screen exists (`TaskViewTests`): a due date never outranks priority, inside a group the soonest due leads and undated sorts last, a task with no due date is never overdue and neither is a finished one, and the due wording ("Today", "Tomorrow", "Overdue · Sep 19") is pinned
 
