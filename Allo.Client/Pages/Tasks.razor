@@ -200,6 +200,13 @@
             var to = Lists.FirstOrDefault(l => l.Id == task.TaskListId)?.Name ?? "another list";
             Snackbar.Add($"Moved to {to}", Severity.Normal, options =>
             {
+                // Eight seconds to read it and reach Undo, then gone. Stated explicitly: left to
+                // the defaults it never went away at all. MudBlazor also adds a 1s fade-in and
+                // a 2s fade-out, which made "8 seconds" last 11; quick fades keep it near 9.
+                options.RequireInteraction = false;
+                options.VisibleStateDuration = 8000;
+                options.ShowTransitionDuration = 300;
+                options.HideTransitionDuration = 500;
                 options.Action = "Undo";
                 options.ActionColor = Color.Primary;
                 options.OnClick = _ => UndoMoveAsync(task.Id, from);
