@@ -254,7 +254,7 @@ not.
   - "N selected · Move to… · Cancel" replaces the add bar, where the thumb already is. "Moved N tasks to Garden · Undo" sends each task back to its own list
   - The gesture is plain pointer events, no native API: a 500ms hold, cancelled by more than 10px of movement (it's a scroll) or by lifting. The browser's own long-press menu is suppressed on task rows only. The release after a long-press is also a tap, which would unselect the task it just selected; it is swallowed at the window's capture phase, before Blazor sees it. **Switching that off made the check fail** — the task came back unselected
   - Android's back gesture ends selection instead of leaving the page: entering pushes a history entry, and Cancel or Move takes it back off, so one Back still leaves normally afterwards
-  - **Not yet tried on a physical phone.** The callout suppression and the hold-versus-scroll threshold behave differently on real touch hardware than in a headless browser
+  - Confirmed working on a real Android phone with 0.4.0 (2026-09-24): the long-press, the suppressed browser menu and the hold-versus-scroll threshold all behave, which headless testing couldn't show
 - [x] Tasks screen: its own sidebar entry, grouped by priority, with a "Done" section at the bottom reusing the In-the-cart pattern
 - [x] Reuse the add bar: type a title, press enter, keep typing. Priority and due date are set in an edit sheet, not in the add flow — adding stays one gesture, with a "set priority or date" shortcut on the last thing added
 - [x] **Add to calendar.** A task with a due date offers a button that hands the phone a generated `.ics`
