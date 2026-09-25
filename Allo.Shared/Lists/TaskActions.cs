@@ -3,6 +3,9 @@ using Allo.Shared.Sync;
 
 namespace Allo.Shared.Lists;
 
+// One task moved by a batch move: enough to put it back where it was.
+public sealed record TaskMove(Guid TaskId, Guid FromListId);
+
 // Every task action. Like ListActions, they write to the device and return at once;
 // syncing happens after, so nothing here waits on a network.
 public sealed class TaskActions(LocalStore store, TimeProvider time)
@@ -38,6 +41,23 @@ public sealed class TaskActions(LocalStore store, TimeProvider time)
         task.TaskListId = taskListId;
         await store.SaveAsync(task);
         return true;
+    }
+
+    // Moves several tasks at once. Returns where each moved task came from, so Undo can send
+    // every one back to its own list; tasks already on the target, or a target that isn't a
+    // live list here, are left alone and not reported.
+    public async Task<IReadOnlyList<TaskMove>> MoveManyAsync(IEnumerable<TaskEntry> tasks, Guid taskListId)
+    {
+        var moves = new List<TaskMove>();
+        foreach (var task in tasks.ToList())
+        {
+            var from = task.TaskListId;
+            if (await MoveAsync(task, taskListId))
+            {
+                moves.Add(new TaskMove(task.Id, from));
+            }
+        }
+        return moves;
     }
 
     public Task SetDoneAsync(TaskEntry task, bool isDone, Guid userId) =>

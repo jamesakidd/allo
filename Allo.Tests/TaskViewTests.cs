@@ -211,6 +211,58 @@ public class TaskViewTests
     }
 
     [Fact]
+    public async Task MovingSeveral_MovesThemAll_AndRemembersWhereEachCameFrom()
+    {
+        var garden = await _actions.CreateListAsync("Garden");
+        var a = await AddAsync("prune the apple tree", Priority.High);
+        var b = await AddAsync("rake the leaves");
+        var stays = await AddAsync("fix the gate");
+
+        var moves = await _actions.MoveManyAsync([a, b], garden.Id);
+
+        Assert.Equal([a.Id, b.Id], moves.Select(m => m.TaskId));
+        Assert.All(moves, m => Assert.Equal(TaskList.DefaultId, m.FromListId));
+        Assert.Equal(["fix the gate"], Build().ToDo.SelectMany(g => g.Tasks).Select(t => t.Title));
+        Assert.Equal(2, TaskView.Tasks(_store, garden.Id).Count());
+        // Nothing else about them changed.
+        Assert.Equal(Priority.High, a.Priority);
+        Assert.Equal(stays.TaskListId, TaskList.DefaultId);
+    }
+
+    // A task already on the target isn't a move, so Undo mustn't try to send it "back".
+    [Fact]
+    public async Task MovingSeveral_SkipsOnesAlreadyThere()
+    {
+        var garden = await _actions.CreateListAsync("Garden");
+        var already = await _actions.AddAsync("already in the garden", garden.Id, User);
+        var moving = await AddAsync("rake the leaves");
+
+        var moves = await _actions.MoveManyAsync([already, moving], garden.Id);
+
+        Assert.Equal([moving.Id], moves.Select(m => m.TaskId));
+    }
+
+    // What the batch Undo does: each one straight back to the list it came from.
+    [Fact]
+    public async Task UndoingABatch_PutsEachBackWhereItWas()
+    {
+        var garden = await _actions.CreateListAsync("Garden");
+        var house = await _actions.CreateListAsync("House");
+        var fromTasks = await AddAsync("from Tasks");
+        var fromHouse = await _actions.AddAsync("from House", house.Id, User);
+
+        var moves = await _actions.MoveManyAsync([fromTasks, fromHouse], garden.Id);
+        foreach (var move in moves)
+        {
+            await _actions.MoveAsync(_store.Tasks.Single(t => t.Id == move.TaskId), move.FromListId);
+        }
+
+        Assert.Equal(TaskList.DefaultId, fromTasks.TaskListId);
+        Assert.Equal(house.Id, fromHouse.TaskListId);
+        Assert.Empty(TaskView.Tasks(_store, garden.Id));
+    }
+
+    [Fact]
     public async Task TheLastListCannotBeDeleted()
     {
         var only = TaskView.Lists(_store).Single();

@@ -396,3 +396,37 @@ h1:focus {
 .new-list-choice {
     color: var(--mud-palette-primary);
 }
+
+/* ---- Task selection ---- */
+
+/* A hold on a task row is a gesture, not a request to select text or open the browser's
+   own long-press menu. */
+.task-row {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    border-radius: 8px;
+    transition: background-color 0.12s ease-out;
+}
+
+.task-row.task-selecting {
+    cursor: pointer;
+}
+
+/* While selecting, the checkbox still shows done or not but can't be tapped: a tap there
+   falls through to the row and selects it, so selecting by the left edge never ticks a
+   task off by accident. */
+.task-row.task-selecting .mud-checkbox {
+    pointer-events: none;
+}
+
+.task-row.task-selected {
+    background-color: rgba(100, 160, 255, 0.16);
+}
+
+.selection-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 3.5rem;
+}

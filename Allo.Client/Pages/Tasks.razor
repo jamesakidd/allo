@@ -2,17 +2,18 @@
 @using Allo.Shared.Lists
 @using Allo.Shared.Models
 @using Allo.Shared.Sync
-@implements IDisposable
+@implements IAsyncDisposable
 @inject LocalStore Store
 @inject TaskActions Actions
 @inject UiState Ui
 @inject AlloAuthStateProvider Auth
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
+@inject IJSRuntime Js
 
 <PageTitle>allo · tasks</PageTitle>
 
-<div class="list-page">
+<div class="list-page" @ref="_listArea" data-long-press="@(Lists.Count > 1 ? "on" : "off")">
     @* Always shown, even with one list: it's also where a new list is made. Hiding it
        until a second list existed is what made several lists unreachable. *@
     <div class="list-selectors">
@@ -28,6 +29,14 @@
         </MudSelect>
         <MudMenu Icon="@Icons.Material.Filled.Edit" AriaLabel="Manage this list" Dense="true"
                  AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+            @* The findable way into selection; long-press on a row is the quick one. Only
+               offered when there's another list to move tasks to. *@
+            @if (Lists.Count > 1 && !_sections.IsEmpty)
+            {
+                <MudMenuItem Icon="@Icons.Material.Filled.Checklist" OnClick="StartSelectingAsync">
+                    Select tasks
+                </MudMenuItem>
+            }
             <MudMenuItem Icon="@Icons.Material.Filled.DriveFileRenameOutline" OnClick="RenameListAsync">
                 Rename @CurrentList?.Name
             </MudMenuItem>
@@ -60,6 +69,8 @@
             @foreach (var task in group.Tasks)
             {
                 <TaskRow @key="task.Id" Entry="task" Today="_today"
+                         Selecting="_selecting" Selected="@_selected.Contains(task.Id)"
+                         OnSelect="@(() => ToggleSelected(task.Id))"
                          OnToggle="@(done => ToggleAsync(task, done))"
                          OnEdit="@(() => EditAsync(task))" />
             }
@@ -80,6 +91,8 @@
                 @foreach (var task in _sections.Done)
                 {
                     <TaskRow @key="task.Id" Entry="task" Today="_today"
+                             Selecting="_selecting" Selected="@_selected.Contains(task.Id)"
+                             OnSelect="@(() => ToggleSelected(task.Id))"
                              OnToggle="@(done => ToggleAsync(task, done))"
                              OnEdit="@(() => EditAsync(task))" />
                 }
@@ -88,7 +101,27 @@
     }
 </div>
 
-<TaskAddBar TaskListId="Ui.TaskListId" UserId="UserId" OnEditLast="EditAsync" />
+@if (_selecting)
+{
+    @* Replaces the add bar while selecting, so the actions sit where the thumb already is. *@
+    <div class="add-bar selection-bar">
+        <MudText Typo="Typo.subtitle2">@SelectionLabel</MudText>
+        <MudSpacer />
+        <MudMenu Label="Move to…" Variant="Variant.Filled" Color="Color.Primary" Dense="true"
+                 Disabled="@(_selected.Count == 0 || OtherLists.Count == 0)"
+                 AnchorOrigin="Origin.TopRight" TransformOrigin="Origin.BottomRight">
+            @foreach (var list in OtherLists)
+            {
+                <MudMenuItem OnClick="@(() => MoveSelectedAsync(list))">@list.Name</MudMenuItem>
+            }
+        </MudMenu>
+        <MudButton Variant="Variant.Text" OnClick="CancelSelectionAsync">Cancel</MudButton>
+    </div>
+}
+else
+{
+    <TaskAddBar TaskListId="Ui.TaskListId" UserId="UserId" OnEditLast="EditAsync" />
+}
 
 @code {
     private TaskSections _sections = new([], []);
@@ -111,6 +144,7 @@
 
     private async Task SelectListAsync(Guid listId)
     {
+        await CancelSelectionAsync();
         if (listId == NewListChoice)
         {
             // Picking "+ New list…" doesn't switch lists; making one does, below.
@@ -178,6 +212,10 @@
         // Local date, not UTC: "today" has to mean the day the person is actually having.
         _today = DateOnly.FromDateTime(DateTime.Now);
         _sections = TaskView.Build(Store, Ui.TaskListId, _today);
+        if (_selecting)
+        {
+            _selected.IntersectWith(TaskView.Tasks(Store, Ui.TaskListId).Select(t => t.Id));
+        }
     }
 
     private Task ToggleAsync(TaskEntry task, bool isDone) => Actions.SetDoneAsync(task, isDone, UserId);
@@ -198,19 +236,123 @@
         if (!task.IsDeleted && task.TaskListId != from)
         {
             var to = Lists.FirstOrDefault(l => l.Id == task.TaskListId)?.Name ?? "another list";
-            Snackbar.Add($"Moved to {to}", Severity.Normal, options =>
-            {
-                // Eight seconds to read it and reach Undo, then gone. Stated explicitly: left to
-                // the defaults it never went away at all. MudBlazor also adds a 1s fade-in and
-                // a 2s fade-out, which made "8 seconds" last 11; quick fades keep it near 9.
-                options.RequireInteraction = false;
-                options.VisibleStateDuration = 8000;
-                options.ShowTransitionDuration = 300;
-                options.HideTransitionDuration = 500;
-                options.Action = "Undo";
-                options.ActionColor = Color.Primary;
-                options.OnClick = _ => UndoMoveAsync(task.Id, from);
-            });
+            ShowMoved($"Moved to {to}", () => UndoMoveAsync(task.Id, from));
+        }
+    }
+
+    // One snackbar for single and batch moves, so they behave alike: eight seconds to read it
+    // and reach Undo, then gone. Stated explicitly — a snackbar with an action button waits
+    // for a tap by default and never went away at all. MudBlazor's default fades (1s in, 2s
+    // out) also made "8 seconds" last 11; quick fades keep it near 9.
+    private void ShowMoved(string message, Func<Task> undo) =>
+        Snackbar.Add(message, Severity.Normal, options =>
+        {
+            options.RequireInteraction = false;
+            options.VisibleStateDuration = 8000;
+            options.ShowTransitionDuration = 300;
+            options.HideTransitionDuration = 500;
+            options.Action = "Undo";
+            options.ActionColor = Color.Primary;
+            options.OnClick = _ => undo();
+        });
+
+    // --- Selection ------------------------------------------------------------------------
+
+    private ElementReference _listArea;
+    private DotNetObjectReference<Tasks>? _self;
+    private bool _selecting;
+    private readonly HashSet<Guid> _selected = [];
+
+    private List<TaskList> OtherLists => [.. Lists.Where(l => l.Id != Ui.TaskListId)];
+
+    private string SelectionLabel => _selected.Count switch
+    {
+        0 => "Tap tasks to select",
+        1 => "1 selected",
+        var n => $"{n} selected",
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _self = DotNetObjectReference.Create(this);
+            await Js.InvokeVoidAsync("alloLongPress.register", _listArea, _self);
+        }
+    }
+
+    [JSInvokable]
+    public Task OnLongPress(string taskId) => InvokeAsync(async () =>
+    {
+        if (Guid.TryParse(taskId, out var id) && Lists.Count > 1)
+        {
+            await EnterSelectionAsync();
+            _selected.Add(id);
+            StateHasChanged();
+        }
+    });
+
+    // Android's back gesture while selecting: end selection rather than leave the page.
+    [JSInvokable]
+    public Task OnSelectionBack() => InvokeAsync(() =>
+    {
+        ClearSelection();
+        StateHasChanged();
+    });
+
+    private Task StartSelectingAsync() => EnterSelectionAsync();
+
+    private async Task EnterSelectionAsync()
+    {
+        if (!_selecting)
+        {
+            _selecting = true;
+            await Js.InvokeVoidAsync("alloLongPress.enterSelection");
+        }
+    }
+
+    private void ClearSelection()
+    {
+        _selecting = false;
+        _selected.Clear();
+    }
+
+    private async Task CancelSelectionAsync()
+    {
+        if (_selecting)
+        {
+            ClearSelection();
+            await Js.InvokeVoidAsync("alloLongPress.leaveSelection");
+        }
+    }
+
+    private void ToggleSelected(Guid taskId)
+    {
+        if (!_selected.Remove(taskId))
+        {
+            _selected.Add(taskId);
+        }
+    }
+
+    private async Task MoveSelectedAsync(TaskList target)
+    {
+        var tasks = TaskView.Tasks(Store, Ui.TaskListId).Where(t => _selected.Contains(t.Id)).ToList();
+        var moves = await Actions.MoveManyAsync(tasks, target.Id);
+        await CancelSelectionAsync();
+        if (moves.Count > 0)
+        {
+            ShowMoved(moves.Count == 1 ? $"Moved 1 task to {target.Name}" : $"Moved {moves.Count} tasks to {target.Name}",
+                () => UndoMovesAsync(moves));
+        }
+    }
+
+    // Each task back to its own list, by id, so a sync in between can't leave Undo acting
+    // on stale copies.
+    private async Task UndoMovesAsync(IReadOnlyList<TaskMove> moves)
+    {
+        foreach (var move in moves)
+        {
+            await UndoMoveAsync(move.TaskId, move.FromListId);
         }
     }
 
@@ -226,9 +368,11 @@
 
     private async Task ClearDoneAsync() => await Actions.ClearDoneAsync(Ui.TaskListId);
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         Store.Changed -= Refresh;
         Ui.Changed -= Refresh;
+        await Js.InvokeVoidAsync("alloLongPress.unregister");
+        _self?.Dispose();
     }
 }

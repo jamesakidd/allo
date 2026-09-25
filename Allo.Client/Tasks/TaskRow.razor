@@ -2,12 +2,18 @@
 @using Allo.Shared.Models
 
 @* Same shape as EntryRow: the whole row opens the editor, the checkbox keeps its own
-   generous tap area. Priority isn't shown here — it's the group header above. *@
-<div class="entry-row @(Entry.IsDone ? "entry-checked" : "")">
-    <MudCheckBox T="bool" Value="Entry.IsDone" ValueChanged="@(v => OnToggle.InvokeAsync(v))"
+   generous tap area. Priority isn't shown here — it's the group header above.
+
+   In selection mode the whole row, checkbox included, toggles selection instead: the
+   checkbox still shows done or not, but won't change it, so selecting a task by its left
+   edge can never tick it off by accident. Selected rows are highlighted. data-task-id is
+   what the long-press script looks for. *@
+<div class="entry-row task-row @(Entry.IsDone ? "entry-checked" : "") @(Selecting ? "task-selecting" : "") @(Selected ? "task-selected" : "")"
+     data-task-id="@Entry.Id" @onclick="RowClickAsync">
+    <MudCheckBox T="bool" Value="Entry.IsDone" ValueChanged="ToggleAsync"
                  Color="Color.Primary" Size="Size.Large" Dense="false"
                  aria-label="@($"Mark {Entry.Title} done")" />
-    <div class="entry-body" @onclick="@(() => OnEdit.InvokeAsync())">
+    <div class="entry-body" @onclick="BodyClickAsync">
         <div class="entry-name">
             <MudText Typo="Typo.body1">@Entry.Title</MudText>
             @if (Due is { Length: > 0 })
@@ -27,10 +33,23 @@
     [Parameter, EditorRequired] public DateOnly Today { get; set; }
     [Parameter] public EventCallback<bool> OnToggle { get; set; }
     [Parameter] public EventCallback OnEdit { get; set; }
+    [Parameter] public bool Selecting { get; set; }
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback OnSelect { get; set; }
 
     private string? Due => TaskView.DueLabel(Entry, Today);
 
     private bool Overdue => TaskView.IsOverdue(Entry, Today);
 
     private bool DueToday => TaskView.IsDueToday(Entry, Today);
+
+    // A tap on the body bubbles up to the row, so each handler acts in exactly one mode:
+    // the body opens the editor outside selection, the row selects inside it.
+    private Task BodyClickAsync() => Selecting ? Task.CompletedTask : OnEdit.InvokeAsync();
+
+    private Task RowClickAsync() => Selecting ? OnSelect.InvokeAsync() : Task.CompletedTask;
+
+    // The checkbox can't be tapped while selecting (see app.css); this is the guard for any
+    // other way of reaching it, like a keyboard.
+    private Task ToggleAsync(bool done) => Selecting ? Task.CompletedTask : OnToggle.InvokeAsync(done);
 }
