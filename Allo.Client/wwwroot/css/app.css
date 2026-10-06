@@ -114,6 +114,14 @@ h1:focus {
     gap: 0.25rem;
 }
 
+/* The checkbox sets the row's height: MudBlazor pads a large one by 12px all round, which
+   made every row 60px around 40px of text. 6px keeps the box itself the same size and the
+   whole tap target at 48px, the touch-target minimum and the row height the design always
+   meant to have. Shared by the shopping list and Tasks. */
+.entry-row .mud-checkbox .mud-button-root {
+    padding: 6px;
+}
+
 .entry-body {
     flex: 1;
     padding: 0.5rem 0.25rem;
